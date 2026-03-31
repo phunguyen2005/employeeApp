@@ -1,0 +1,61 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+model Employee {
+  id           String      @id @default(uuid())
+  fullName     String
+  dob          DateTime
+  email        String      @unique
+  password     String
+  salary       Float
+  taxCode      String
+  role         String      @default("REGULAR")
+  
+  departmentId String?
+  department   Department? @relation("EmployeeDepartment", fields: [departmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  
+  managedDepartment Department? @relation("DepartmentManager")
+
+  actorLogs    AuditLog[]  @relation("ActorLogs")
+  targetLogs   AuditLog[]  @relation("TargetLogs")
+
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model Department {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  
+  managerId   String?    @unique
+  manager     Employee?  @relation("DepartmentManager", fields: [managerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  employees   Employee[] @relation("EmployeeDepartment")
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model AuditLog {
+  id           String       @id @default(uuid())
+  timestamp    DateTime     @default(now())
+  
+  actorId      String
+  actor        Employee     @relation("ActorLogs", fields: [actorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  actorName    String
+  
+  targetId     String
+  target       Employee     @relation("TargetLogs", fields: [targetId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  targetName   String
+  
+  action       String
+  changes      String       @db.VarChar(Max) // JSON diff stored as string
+
+  createdAt    DateTime     @default(now())
+}

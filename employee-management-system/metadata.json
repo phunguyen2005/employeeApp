@@ -1,0 +1,5 @@
+{
+  "name": "Employee Management System",
+  "description": "Full-stack SaaS Employee Management System with complex RBAC, auditing, and department management.",
+  "requestFramePermissions": []
+}
