@@ -28,7 +28,7 @@ export const Layout: React.FC = () => {
       onSuccess: () => {
         setCurrentUser(null);
         queryClient.clear();
-        navigate({ to: '/login' });
+        window.location.replace('/login');
       }
     });
   };
