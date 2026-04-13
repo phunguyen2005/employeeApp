@@ -68,3 +68,16 @@ After securely seeding the database, you can log in to test different access pri
 | frank@company.com     | frank    | `MANAGER`            |
 | grace@company.com     | grace    | `ACCOUNTING`         |
 | henry@company.com     | henry    | `REGULAR`            |
+
+## Database Security Model
+
+The project uses a compact database-enforced RBAC model:
+
+- Fixed application role on `AppUser.roleName`, checked by `sp_CheckPermission`.
+- Native SQL Server database roles: `ems_regular`, `ems_manager`, `ems_hr_employee`, `ems_hr_manager`, `ems_accounting`, `ems_admin`, and `ems_app_runtime`.
+
+The separate `Role`, `Permission`, `UserRole`, and `RolePermission` tables were removed because this project uses a fixed role matrix instead of user-defined permissions.
+
+Direct human-facing database roles are denied base-table access to sensitive tables such as `AppUser`, `Employee`, `EmployeeSensitive`, and `AuditLog`. They read through curated views such as `vw_EmployeeDirectory`, `vw_EmployeeWithSensitive`, `vw_PayrollSummary`, and `vw_AuditLogDetail`, with Row-Level Security filtering rows by `SESSION_CONTEXT`.
+
+The `ems_app_runtime` role is intended for the application connection. It retains the permissions needed by the current Prisma/tRPC code paths while stored procedures and triggers enforce authentication lockout, soft deletes, session revocation, audit immutability, and permission checks.

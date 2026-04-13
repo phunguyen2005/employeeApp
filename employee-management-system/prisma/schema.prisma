@@ -7,55 +7,101 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model AppUser {
+  id             String    @id @default(uuid()) @db.UniqueIdentifier
+  email          String    @unique @db.NVarChar(255)
+  passwordHash   String    @db.NVarChar(255)
+  roleName       String    @default("REGULAR") @db.NVarChar(50)
+  isActive       Boolean   @default(true)
+  lastLoginAt    DateTime? @db.DateTime2
+  failedAttempts Int       @default(0)
+  lockedUntil    DateTime? @db.DateTime2
+  createdAt      DateTime  @default(now()) @db.DateTime2
+  updatedAt      DateTime  @updatedAt @db.DateTime2
+
+  employee      Employee?
+  sessions      UserSession[]
+  auditLogs     AuditLog[]    @relation("AuditActor")
+}
+
 model Employee {
-  id           String      @id @default(uuid())
-  fullName     String
-  dob          DateTime
-  email        String      @unique
-  password     String
-  salary       Float
-  taxCode      String
-  role         String      @default("REGULAR")
-  
-  departmentId String?
-  department   Department? @relation("EmployeeDepartment", fields: [departmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  
-  managedDepartment Department? @relation("DepartmentManager")
+  id           String   @id @default(uuid()) @db.UniqueIdentifier
+  userId       String   @unique @db.UniqueIdentifier
+  fullName     String   @db.NVarChar(200)
+  dob          DateTime @db.Date
+  phone        String?  @db.NVarChar(20)
+  departmentId String?  @db.UniqueIdentifier
+  hireDate     DateTime @default(now()) @db.Date
+  status       String   @default("ACTIVE") @db.NVarChar(20)
+  createdAt    DateTime @default(now()) @db.DateTime2
+  updatedAt    DateTime @updatedAt @db.DateTime2
 
-  actorLogs    AuditLog[]  @relation("ActorLogs")
-  targetLogs   AuditLog[]  @relation("TargetLogs")
+  user               AppUser            @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  department         Department?        @relation("EmployeeDepartment", fields: [departmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  sensitive          EmployeeSensitive?
+  managedDepartments Department[]       @relation("DepartmentManager")
 
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  @@index([departmentId])
+  @@index([userId])
+  @@index([status])
+}
+
+model EmployeeSensitive {
+  id          String   @id @default(uuid()) @db.UniqueIdentifier
+  employeeId  String   @unique @db.UniqueIdentifier
+  salary      Decimal  @db.Decimal(12, 2)
+  taxCode     String   @db.NVarChar(20)
+  bankAccount String?  @db.NVarChar(50)
+  createdAt   DateTime @default(now()) @db.DateTime2
+  updatedAt   DateTime @updatedAt @db.DateTime2
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([employeeId])
 }
 
 model Department {
-  id          String     @id @default(uuid())
-  name        String     @unique
-  
-  managerId   String?    @unique
-  manager     Employee?  @relation("DepartmentManager", fields: [managerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id        String   @id @default(uuid()) @db.UniqueIdentifier
+  name      String   @unique @db.NVarChar(100)
+  managerId String?  @db.UniqueIdentifier
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.DateTime2
+  updatedAt DateTime @updatedAt @db.DateTime2
 
-  employees   Employee[] @relation("EmployeeDepartment")
-
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  manager   Employee?  @relation("DepartmentManager", fields: [managerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  employees Employee[] @relation("EmployeeDepartment")
 }
 
 model AuditLog {
-  id           String       @id @default(uuid())
-  timestamp    DateTime     @default(now())
-  
-  actorId      String
-  actor        Employee     @relation("ActorLogs", fields: [actorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  actorName    String
-  
-  targetId     String
-  target       Employee     @relation("TargetLogs", fields: [targetId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  targetName   String
-  
-  action       String
-  changes      String       @db.VarChar(Max) // JSON diff stored as string
+  id          String   @id @default(uuid()) @db.UniqueIdentifier
+  timestamp   DateTime @default(now()) @db.DateTime2
+  actorId     String?  @db.UniqueIdentifier
+  targetTable String   @db.NVarChar(100)
+  targetId    String   @db.UniqueIdentifier
+  action      String   @db.NVarChar(20)
+  oldValues   String?  @db.NVarChar(Max)
+  newValues   String?  @db.NVarChar(Max)
+  ipAddress   String?  @db.NVarChar(45)
+  userAgent   String?  @db.NVarChar(500)
 
-  createdAt    DateTime     @default(now())
+  actor AppUser? @relation("AuditActor", fields: [actorId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([timestamp])
+  @@index([actorId])
+  @@index([targetTable, targetId])
+}
+
+model UserSession {
+  id        String    @id @default(uuid()) @db.UniqueIdentifier
+  userId    String    @db.UniqueIdentifier
+  tokenHash String    @db.NVarChar(255)
+  issuedAt  DateTime  @default(now()) @db.DateTime2
+  expiresAt DateTime  @db.DateTime2
+  revokedAt DateTime? @db.DateTime2
+  ipAddress String?   @db.NVarChar(45)
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([userId])
+  @@index([tokenHash])
 }

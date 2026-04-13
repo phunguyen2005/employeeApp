@@ -4,8 +4,6 @@ export const canEditEmployee = (currentUser: Employee, target: Employee): boolea
   if (currentUser.role === 'ADMIN') return true;
   if (currentUser.role === 'HR_MANAGER') return true;
   if (currentUser.role === 'HR_EMPLOYEE') {
-    // HR employee: Can view and edit any employee outside their own department.
-    // Policy 1 applies within their own department (no edit).
     return currentUser.departmentId !== target.departmentId;
   }
   return false;
@@ -16,7 +14,7 @@ export const canCreateDeleteEmployee = (currentUser: Employee): boolean => {
 };
 
 export const canManageDepartments = (currentUser: Employee): boolean => {
-  return currentUser.role === 'ADMIN';
+  return currentUser.role === 'ADMIN' || currentUser.role === 'HR_MANAGER';
 };
 
 export const canViewAuditLogs = (currentUser: Employee): boolean => {
@@ -25,38 +23,24 @@ export const canViewAuditLogs = (currentUser: Employee): boolean => {
 
 export const getVisibleFields = (currentUser: Employee, target: Employee): (keyof Employee)[] => {
   const allFields: (keyof Employee)[] = ['id', 'fullName', 'dob', 'email', 'departmentId', 'salary', 'taxCode', 'role'];
-  const basicFields: (keyof Employee)[] = ['id', 'fullName', 'dob', 'email', 'departmentId', 'role', 'taxCode']; // all except salary
+  const directoryFields: (keyof Employee)[] = ['id', 'fullName', 'dob', 'email', 'departmentId', 'role'];
 
-  if (currentUser.role === 'ADMIN' || currentUser.role === 'HR_MANAGER') {
+  if (['ADMIN', 'HR_MANAGER', 'HR_EMPLOYEE', 'ACCOUNTING'].includes(currentUser.role)) {
     return allFields;
-  }
-
-  if (currentUser.role === 'HR_EMPLOYEE') {
-    if (currentUser.departmentId === target.departmentId) {
-      return basicFields; // Policy 1
-    }
-    return allFields;
-  }
-
-  if (currentUser.role === 'ACCOUNTING') {
-    if (currentUser.departmentId === target.departmentId) {
-      return basicFields; // Policy 1
-    }
-    return ['id', 'salary', 'taxCode']; // Company-wide payroll view
   }
 
   if (currentUser.role === 'MANAGER') {
     if (currentUser.departmentId === target.departmentId) {
-      return allFields; // View all info including salary
+      return allFields;
     }
-    return []; // Cannot view outside department
+    return [];
   }
 
   if (currentUser.role === 'REGULAR') {
     if (currentUser.departmentId === target.departmentId) {
-      return basicFields; // Policy 1
+      return directoryFields;
     }
-    return []; // Cannot view outside department
+    return [];
   }
 
   return [];

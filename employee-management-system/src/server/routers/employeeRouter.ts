@@ -1,201 +1,295 @@
 import { protectedProcedure, router } from '../trpc';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { applyColumnMasking, getRowLevelFilter } from '../utils/rbac';
+import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { getRequestIp } from '../context';
+import { assertPermission, getDepartmentScope } from '../utils/rbac';
+import type { Role } from '../../types';
+
+const roles: [Role, ...Role[]] = ['REGULAR', 'MANAGER', 'HR_EMPLOYEE', 'HR_MANAGER', 'ACCOUNTING', 'ADMIN'];
+
+type EmployeeViewRow = {
+  id: string;
+  fullName: string;
+  dob: Date | string;
+  email: string;
+  departmentId: string | null;
+  departmentName: string | null;
+  status: string;
+  hireDate: Date | string;
+  salary: Prisma.Decimal | number | string | null;
+  taxCode: string | null;
+  bankAccount: string | null;
+  role: string | null;
+};
+
+const formatDate = (value: Date | string) =>
+  value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+
+const normalizeMoney = (value: EmployeeViewRow['salary']) => {
+  if (value === null || value === undefined) return undefined;
+  const numericValue = Number(value);
+  return Number.isNaN(numericValue) ? undefined : numericValue;
+};
+
+const toEmployeePayload = (row: EmployeeViewRow) => ({
+  id: row.id,
+  fullName: row.fullName,
+  dob: formatDate(row.dob),
+  email: row.email,
+  departmentId: row.departmentId,
+  departmentName: row.departmentName,
+  salary: normalizeMoney(row.salary),
+  taxCode: row.taxCode ?? undefined,
+  bankAccount: row.bankAccount ?? undefined,
+  role: roles.includes(row.role as Role) ? (row.role as Role) : 'REGULAR',
+  status: row.status,
+  hireDate: formatDate(row.hireDate),
+});
+
+const employeeViewQuery = async (tx: Prisma.TransactionClient, employeeId?: string) => {
+  if (employeeId) {
+    return tx.$queryRaw<EmployeeViewRow[]>`
+      SELECT employeeId AS id, fullName, dob, email, departmentId, departmentName, status,
+             hireDate, salary, taxCode, bankAccount, primaryRole AS role
+      FROM [dbo].[vw_EmployeeWithSensitive]
+      WHERE employeeId = ${employeeId}
+    `;
+  }
+
+  return tx.$queryRaw<EmployeeViewRow[]>`
+    SELECT employeeId AS id, fullName, dob, email, departmentId, departmentName, status,
+           hireDate, salary, taxCode, bankAccount, primaryRole AS role
+    FROM [dbo].[vw_EmployeeWithSensitive]
+    ORDER BY fullName
+  `;
+};
+
+const getTargetEmployee = (tx: Prisma.TransactionClient, employeeId: string) =>
+  tx.employee.findUnique({
+    where: { id: employeeId },
+    include: {
+      user: true,
+      sensitive: true,
+    },
+  });
 
 export const employeeRouter = router({
-  // Read List
-  getAll: protectedProcedure.query(async ({ ctx }) => {
-    const filter = getRowLevelFilter(ctx.user);
-    const rawEmployees = await ctx.prisma.employee.findMany({
-      where: filter,
-    });
-    return rawEmployees.map((e) => {
-      const { password, ...rest } = e as any;
-      return applyColumnMasking(ctx.user, rest);
-    });
-  }),
+  getAll: protectedProcedure.query(async ({ ctx }) =>
+    ctx.withSessionContext(async (tx) => {
+      await assertPermission(tx, ctx.user, 'employee', 'read', 'own_department');
+      const rows = await employeeViewQuery(tx);
+      return rows.map(toEmployeePayload);
+    })
+  ),
 
-  // Read Singular
   getById: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const filter = getRowLevelFilter(ctx.user);
-      const employee = await ctx.prisma.employee.findFirst({
-        where: { id: input.id, ...filter },
-      });
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ ctx, input }) =>
+      ctx.withSessionContext(async (tx) => {
+        await assertPermission(tx, ctx.user, 'employee', 'read', 'own_department');
+        const [employee] = await employeeViewQuery(tx, input.id);
 
-      if (!employee) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Employee not found or unauthorized to view',
-        });
-      }
+        if (!employee) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Employee not found or unauthorized to view',
+          });
+        }
 
-      const { password, ...rest } = employee as any;
-      return applyColumnMasking(ctx.user, rest);
-    }),
+        return toEmployeePayload(employee);
+      })
+    ),
 
-  // Update
   update: protectedProcedure
     .input(
       z.object({
-        id: z.string(),
+        id: z.string().uuid(),
         data: z.object({
-          fullName: z.string().optional(),
+          fullName: z.string().min(2).optional(),
           dob: z.string().optional(),
-          email: z.string().optional(),
-          departmentId: z.string().optional(),
-          salary: z.number().optional(),
-          taxCode: z.string().optional(),
+          email: z.string().email().optional(),
+          departmentId: z.string().uuid().optional(),
+          salary: z.number().nonnegative().optional(),
+          taxCode: z.string().min(3).optional(),
         }),
       })
     )
-    .mutation(async ({ ctx, input }) => {
-      // 1. Block self-editing universally
-      if (input.id === ctx.user.id) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'You cannot edit your own record.',
-        });
-      }
-
-      // 2. Authorize based on roles
-      if (['REGULAR', 'MANAGER', 'ACCOUNTING'].includes(ctx.user.role)) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'You lack write permissions.',
-        });
-      }
-
-      const targetUser = await ctx.prisma.employee.findUnique({
-        where: { id: input.id },
-      });
-
-      if (!targetUser) throw new TRPCError({ code: 'NOT_FOUND' });
-
-      if (ctx.user.role === 'HR_EMPLOYEE') {
-        if (targetUser.departmentId === ctx.user.departmentId) {
+    .mutation(async ({ ctx, input }) =>
+      ctx.withSessionContext(async (tx) => {
+        if (input.id === ctx.user.employeeId) {
           throw new TRPCError({
             code: 'FORBIDDEN',
-            message: 'HR Employees cannot edit records in their own department.',
+            message: 'You cannot edit your own record.',
           });
         }
-      }
 
-      // 3. Peform the update
-      const updated = await ctx.prisma.employee.update({
-        where: { id: input.id },
-        data: input.data,
-      });
+        const targetEmployee = await getTargetEmployee(tx, input.id);
+        if (!targetEmployee) throw new TRPCError({ code: 'NOT_FOUND' });
 
-      // 4. Fire the Audit Log
-      await ctx.prisma.auditLog.create({
-        data: {
-          actorId: ctx.user.id,
-          actorName: ctx.user.fullName,
-          targetId: targetUser.id,
-          targetName: targetUser.fullName,
-          action: 'UPDATE',
-          changes: JSON.stringify(input.data),
-        },
-      });
+        const scope = getDepartmentScope(ctx.user.departmentId, targetEmployee.departmentId);
+        const ipAddress = getRequestIp(ctx.req);
+        const hasEmployeeChanges =
+          input.data.fullName !== undefined || input.data.dob !== undefined || input.data.departmentId !== undefined;
+        const hasSensitiveChanges = input.data.salary !== undefined || input.data.taxCode !== undefined;
 
-      const { password, ...rest } = updated as any;
-      return applyColumnMasking(ctx.user, rest);
-    }),
+        if (hasEmployeeChanges || input.data.email !== undefined) {
+          await assertPermission(tx, ctx.user, 'employee', 'update', scope);
+        }
 
-  // Create
+        if (hasEmployeeChanges) {
+          await tx.$executeRaw`
+            EXEC [dbo].[sp_UpdateEmployee]
+              @ActorUserId = ${ctx.user.userId},
+              @EmployeeId = ${input.id},
+              @FullName = ${input.data.fullName ?? null},
+              @Dob = ${input.data.dob ? new Date(input.data.dob) : null},
+              @DepartmentId = ${input.data.departmentId ?? null},
+              @Status = ${null},
+              @IPAddress = ${ipAddress}
+          `;
+        }
+
+        if (input.data.email !== undefined && input.data.email !== targetEmployee.user.email) {
+          await tx.appUser.update({
+            where: { id: targetEmployee.userId },
+            data: { email: input.data.email },
+          });
+
+          await tx.auditLog.create({
+            data: {
+              actorId: ctx.user.userId,
+              targetTable: 'AppUser',
+              targetId: targetEmployee.userId,
+              action: 'UPDATE',
+              oldValues: JSON.stringify({ email: targetEmployee.user.email }),
+              newValues: JSON.stringify({ email: input.data.email }),
+              ipAddress,
+              userAgent: ctx.req.headers['user-agent'],
+            },
+          });
+        }
+
+        if (hasSensitiveChanges) {
+          await assertPermission(tx, ctx.user, 'employee_sensitive', 'update', scope);
+
+          if (targetEmployee.sensitive) {
+            await tx.employeeSensitive.update({
+              where: { employeeId: input.id },
+              data: {
+                salary: input.data.salary,
+                taxCode: input.data.taxCode,
+              },
+            });
+          } else {
+            await tx.employeeSensitive.create({
+              data: {
+                employeeId: input.id,
+                salary: input.data.salary ?? 0,
+                taxCode: input.data.taxCode ?? 'UNKNOWN',
+              },
+            });
+          }
+        }
+
+        const [updatedEmployee] = await employeeViewQuery(tx, input.id);
+        if (!updatedEmployee) throw new TRPCError({ code: 'NOT_FOUND' });
+
+        return toEmployeePayload(updatedEmployee);
+      })
+    ),
+
   create: protectedProcedure
     .input(z.object({
-      fullName: z.string(),
+      fullName: z.string().min(2),
       dob: z.string(),
       email: z.string().email(),
       password: z.string().min(1),
-      departmentId: z.string().optional(),
-      salary: z.number(),
-      taxCode: z.string(),
-      role: z.string()
+      departmentId: z.string().uuid().optional(),
+      salary: z.number().nonnegative(),
+      taxCode: z.string().min(3),
+      role: z.enum(roles),
     }))
-    .mutation(async ({ ctx, input }) => {
-      if (['REGULAR', 'MANAGER', 'ACCOUNTING'].includes(ctx.user.role)) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'You lack create permissions.' });
-      }
+    .mutation(async ({ ctx, input }) =>
+      ctx.withSessionContext(async (tx) => {
+        const scope = getDepartmentScope(ctx.user.departmentId, input.departmentId ?? null);
+        await assertPermission(tx, ctx.user, 'employee', 'create', scope);
 
-      if (ctx.user.role === 'HR_EMPLOYEE' && input.departmentId === ctx.user.departmentId) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'HR Employees cannot create records in their own department.' });
-      }
+        const passwordHash = await bcrypt.hash(input.password, 10);
+        const ipAddress = getRequestIp(ctx.req);
 
-      const passwordHash = await bcrypt.hash(input.password, 10);
-      
-      const newEmployee = await ctx.prisma.employee.create({
-        data: {
-          fullName: input.fullName,
-          dob: new Date(input.dob),
-          email: input.email,
-          password: passwordHash,
-          departmentId: input.departmentId,
-          salary: input.salary,
-          taxCode: input.taxCode,
-          role: input.role,
-        }
-      });
+        const appUser = await tx.appUser.create({
+          data: {
+            email: input.email,
+            passwordHash,
+            roleName: input.role,
+          },
+        });
 
-      await ctx.prisma.auditLog.create({
-        data: {
-          actorId: ctx.user.id,
-          actorName: ctx.user.fullName,
-          targetId: newEmployee.id,
-          targetName: newEmployee.fullName,
-          action: 'CREATE',
-          changes: 'Created employee record',
-        },
-      });
+        const employee = await tx.employee.create({
+          data: {
+            userId: appUser.id,
+            fullName: input.fullName,
+            dob: new Date(input.dob),
+            departmentId: input.departmentId ?? null,
+            sensitive: {
+              create: {
+                salary: input.salary,
+                taxCode: input.taxCode,
+              },
+            },
+          },
+        });
 
-      const { password, ...rest } = newEmployee as any;
-      return applyColumnMasking(ctx.user, rest);
-    }),
+        await tx.auditLog.create({
+          data: {
+            actorId: ctx.user.userId,
+            targetTable: 'Employee',
+            targetId: employee.id,
+            action: 'CREATE',
+            newValues: JSON.stringify({
+              fullName: input.fullName,
+              email: input.email,
+              departmentId: input.departmentId ?? null,
+              role: input.role,
+              salary: input.salary,
+              taxCode: input.taxCode,
+            }),
+            ipAddress,
+            userAgent: ctx.req.headers['user-agent'],
+          },
+        });
 
-  // Delete
+        const [createdEmployee] = await employeeViewQuery(tx, employee.id);
+        if (!createdEmployee) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR' });
+
+        return toEmployeePayload(createdEmployee);
+      })
+    ),
+
   delete: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      if (input.id === ctx.user.id) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'You cannot delete your own record.' });
-      }
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) =>
+      ctx.withSessionContext(async (tx) => {
+        if (input.id === ctx.user.employeeId) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'You cannot delete your own record.' });
+        }
 
-      if (['REGULAR', 'MANAGER', 'ACCOUNTING'].includes(ctx.user.role)) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'You lack delete permissions.' });
-      }
+        const targetEmployee = await getTargetEmployee(tx, input.id);
+        if (!targetEmployee) throw new TRPCError({ code: 'NOT_FOUND' });
 
-      const targetUser = await ctx.prisma.employee.findUnique({ where: { id: input.id } });
-      if (!targetUser) throw new TRPCError({ code: 'NOT_FOUND' });
+        const scope = getDepartmentScope(ctx.user.departmentId, targetEmployee.departmentId);
+        await assertPermission(tx, ctx.user, 'employee', 'delete', scope);
 
-      if (ctx.user.role === 'HR_EMPLOYEE' && targetUser.departmentId === ctx.user.departmentId) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: 'HR Employees cannot delete records in their own department.' });
-      }
+        await tx.$executeRaw`
+          EXEC [dbo].[sp_SoftDeleteEmployee]
+            @ActorUserId = ${ctx.user.userId},
+            @EmployeeId = ${input.id},
+            @IPAddress = ${getRequestIp(ctx.req)}
+        `;
 
-      await ctx.prisma.$transaction(async (tx) => {
-        await tx.department.updateMany({
-          where: { managerId: input.id },
-          data: { managerId: null },
-        });
-
-        await tx.auditLog.deleteMany({
-          where: {
-            OR: [
-              { actorId: input.id },
-              { targetId: input.id }
-            ]
-          }
-        });
-
-        await tx.employee.delete({
-          where: { id: input.id }
-        });
-      });
-
-      return { success: true };
-    }),
+        return { success: true };
+      })
+    ),
 });
