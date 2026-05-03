@@ -9,6 +9,9 @@ import { Dashboard } from './pages/Dashboard';
 import { EmployeeProfile } from './pages/EmployeeProfile';
 import { AuditLogs } from './pages/AuditLogs';
 import { Login } from './pages/Login'; // Add the Login export
+import { UsersManagement } from './pages/admin/UsersManagement';
+import { RolesManagement } from './pages/admin/RolesManagement';
+import { PermissionsManagement } from './pages/admin/PermissionsManagement';
 
 interface MyRouterContext {}
 
@@ -45,6 +48,30 @@ const auditRoute = createRoute({
   component: AuditLogs,
 });
 
+const auditLogsAliasRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: '/audit-logs',
+  component: AuditLogs,
+});
+
+const adminUsersRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: '/admin/users',
+  component: UsersManagement,
+});
+
+const adminRolesRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: '/admin/roles',
+  component: RolesManagement,
+});
+
+const adminPermissionsRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: '/admin/permissions',
+  component: PermissionsManagement,
+});
+
 // The standalone login page
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -53,7 +80,15 @@ const loginRoute = createRoute({
 });
 
 // Construct the tree
-authLayoutRoute.addChildren([indexRoute, profileRoute, auditRoute]);
+authLayoutRoute.addChildren([
+  indexRoute,
+  profileRoute,
+  auditRoute,
+  auditLogsAliasRoute,
+  adminUsersRoute,
+  adminRolesRoute,
+  adminPermissionsRoute,
+]);
 const routeTree = rootRoute.addChildren([authLayoutRoute, loginRoute]);
 
 export const router = createRouter({

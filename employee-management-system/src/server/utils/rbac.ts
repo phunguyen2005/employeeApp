@@ -7,10 +7,13 @@ export type PermissionResource =
   | 'employee_sensitive'
   | 'department'
   | 'audit_log'
-  | 'user';
+  | 'user'
+  | 'role'
+  | 'permission'
+  | (string & {});
 
-export type PermissionAction = 'read' | 'create' | 'update' | 'delete' | 'manage';
-export type PermissionScope = 'all' | 'own_department' | 'other_department';
+export type PermissionAction = 'read' | 'create' | 'update' | 'delete' | 'manage' | (string & {});
+export type PermissionScope = 'all' | 'own_department' | 'other_department' | (string & {});
 
 type PermissionResult = {
   HasPermission: number | boolean;

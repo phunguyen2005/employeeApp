@@ -19,14 +19,14 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const getEmailError = (value: string) => {
   const trimmedValue = value.trim();
 
-  if (!trimmedValue) return 'Enter your work email address.';
-  if (!emailPattern.test(trimmedValue)) return 'Use a valid email format, like name@company.com.';
+  if (!trimmedValue) return 'Vui lòng nhập email công việc.';
+  if (!emailPattern.test(trimmedValue)) return 'Email chưa đúng định dạng, ví dụ ten@congty.vn.';
 
   return '';
 };
 
 const getPasswordError = (value: string) => {
-  if (!value) return 'Enter your password.';
+  if (!value) return 'Vui lòng nhập mật khẩu.';
   return '';
 };
 
@@ -82,7 +82,7 @@ export const Login: React.FC = () => {
           navigate({ to: '/', replace: true });
         },
         onError: () => {
-          setErrorMsg('Invalid email or password. Please try again.');
+          setErrorMsg('Email hoặc mật khẩu chưa đúng. Vui lòng thử lại.');
         },
       }
     );
@@ -101,7 +101,7 @@ export const Login: React.FC = () => {
       <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-slate-100">
         <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-5 py-4 text-sm backdrop-blur-sm">
           <Loader2 className="h-5 w-5 animate-spin text-cyan-300" />
-          Checking your session...
+          Đang kiểm tra phiên đăng nhập...
         </div>
       </div>
     );
@@ -122,28 +122,28 @@ export const Login: React.FC = () => {
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-400/15 text-cyan-200">
                   <Shield className="h-5 w-5" />
                 </span>
-                Secure workforce access
+                Truy cập nhân sự an toàn
               </div>
 
               <h1 className="mt-8 text-5xl font-semibold tracking-tight text-white">
-                Employee management with a calmer, clearer sign-in flow.
+                Quản lý nhân viên với quy trình đăng nhập rõ ràng và an toàn hơn.
               </h1>
               <p className="mt-5 max-w-lg text-lg leading-8 text-slate-300">
-                Sign in to review employee records, navigate role-based access, and continue your work
-                without friction.
+                Đăng nhập để xem hồ sơ nhân viên, sử dụng quyền truy cập theo vai trò và tiếp tục công việc
+                một cách liền mạch.
               </p>
 
               <div className="mt-10 grid gap-4 sm:grid-cols-2">
                 <div className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm">
-                  <p className="text-sm font-medium text-slate-200">Role-aware access</p>
+                  <p className="text-sm font-medium text-slate-200">Truy cập theo vai trò</p>
                   <p className="mt-2 text-sm leading-6 text-slate-400">
-                    Access the dashboard, profiles, and audit views with clear permission boundaries.
+                    Mở bảng tổng quan, hồ sơ và nhật ký kiểm toán với ranh giới quyền hạn rõ ràng.
                   </p>
                 </div>
                 <div className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm">
-                  <p className="text-sm font-medium text-slate-200">Secure session flow</p>
+                  <p className="text-sm font-medium text-slate-200">Phiên đăng nhập bảo mật</p>
                   <p className="mt-2 text-sm leading-6 text-slate-400">
-                    Keep authentication simple while surfacing helpful client-side guidance during sign in.
+                    Xác thực đơn giản, kèm hướng dẫn rõ ràng ngay khi bạn nhập thông tin đăng nhập.
                   </p>
                 </div>
               </div>
@@ -157,10 +157,10 @@ export const Login: React.FC = () => {
               </div>
 
               <div className="mt-6 text-center">
-                <p className="text-sm font-medium uppercase tracking-[0.28em] text-cyan-700">EMS Portal</p>
-                <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">Welcome back</h2>
+                <p className="text-sm font-medium uppercase tracking-[0.28em] text-cyan-700">Cổng EMS</p>
+                <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">Chào mừng bạn trở lại</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Use your company credentials to access employee tools and protected records.
+                  Sử dụng tài khoản công ty để truy cập công cụ nhân sự và các hồ sơ được bảo vệ.
                 </p>
               </div>
 
@@ -178,7 +178,7 @@ export const Login: React.FC = () => {
 
                 <div>
                   <label htmlFor="email" className="mb-2 block text-sm font-medium text-slate-700">
-                    Email address
+                    Địa chỉ email
                   </label>
                   <div
                     className={`flex items-center rounded-2xl border bg-slate-50 px-4 transition-all ${
@@ -201,17 +201,17 @@ export const Login: React.FC = () => {
                       aria-invalid={!!emailError}
                       aria-describedby={emailError ? 'email-error' : 'email-help'}
                       className="w-full bg-transparent px-3 py-3.5 text-sm text-slate-900 outline-none placeholder:text-slate-400"
-                      placeholder="name@company.com"
-                    />
+                    placeholder="ten@congty.vn"
+                  />
                   </div>
                   <p id={emailError ? 'email-error' : 'email-help'} className={`mt-2 text-sm ${emailError ? 'text-red-600' : 'text-slate-500'}`}>
-                    {emailError || 'Use the same email address you use for your employee account.'}
+                    {emailError || 'Dùng email đang gắn với tài khoản nhân viên của bạn.'}
                   </p>
                 </div>
 
                 <div>
                   <label htmlFor="password" className="mb-2 block text-sm font-medium text-slate-700">
-                    Password
+                    Mật khẩu
                   </label>
                   <div
                     className={`flex items-center rounded-2xl border bg-slate-50 px-4 transition-all ${
@@ -235,20 +235,20 @@ export const Login: React.FC = () => {
                       aria-invalid={!!passwordError}
                       aria-describedby={passwordError || isCapsLockOn ? 'password-status' : undefined}
                       className="w-full bg-transparent px-3 py-3.5 text-sm text-slate-900 outline-none placeholder:text-slate-400"
-                      placeholder="Enter your password"
+                      placeholder="Nhập mật khẩu"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword((current) => !current)}
                       className="rounded-full p-1 text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
                     >
                       {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                     </button>
                   </div>
                   <div id="password-status" className="mt-2 min-h-5 text-sm">
                     {passwordError && <p className="text-red-600">{passwordError}</p>}
-                    {!passwordError && isCapsLockOn && <p className="text-amber-600">Caps Lock is on.</p>}
+                    {!passwordError && isCapsLockOn && <p className="text-amber-600">Caps Lock đang bật.</p>}
                   </div>
                 </div>
 
@@ -260,11 +260,11 @@ export const Login: React.FC = () => {
                       onChange={(e) => setRememberEmail(e.target.checked)}
                       className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
                     />
-                    Remember email on this device
+                    Ghi nhớ email trên thiết bị này
                   </label>
                   <div className="flex items-center gap-2 text-slate-500">
                     <CheckCircle2 className="h-4 w-4 text-cyan-600" />
-                    Client-side validation enabled
+                    Đã bật kiểm tra dữ liệu nhập
                   </div>
                 </div>
 
@@ -274,7 +274,7 @@ export const Login: React.FC = () => {
                   className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3.5 text-sm font-medium text-white transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-300 disabled:cursor-not-allowed disabled:bg-slate-400"
                 >
                   {loginMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {loginMutation.isPending ? 'Signing in...' : 'Sign in securely'}
+                  {loginMutation.isPending ? 'Đang đăng nhập...' : 'Đăng nhập an toàn'}
                 </button>
               </form>
             </div>

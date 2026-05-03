@@ -60,24 +60,42 @@ After securely seeding the database, you can log in to test different access pri
 
 | Email                 | Password | Role                 |
 |-----------------------|----------|----------------------|
-| alice@company.com     | alice    | `ADMIN`              |
-| bob@company.com       | bob      | `MANAGER`            |
-| charlie@company.com   | charlie  | `REGULAR`            |
-| diana@company.com     | diana    | `HR_MANAGER`         |
-| eve@company.com       | eve      | `HR_EMPLOYEE`        |
-| frank@company.com     | frank    | `MANAGER`            |
-| grace@company.com     | grace    | `ACCOUNTING`         |
-| henry@company.com     | henry    | `REGULAR`            |
+| an.nguyen@company.vn  | an       | `ADMIN`              |
+| binh.tran@company.vn  | binh     | `MANAGER`            |
+| chau.le@company.vn    | chau     | `REGULAR`            |
+| dung.pham@company.vn  | dung     | `HR_MANAGER`         |
+| giang.vo@company.vn   | giang    | `HR_EMPLOYEE`        |
+| hai.do@company.vn     | hai      | `MANAGER`            |
+| linh.bui@company.vn   | linh     | `ACCOUNTING`         |
+| nam.hoang@company.vn  | nam      | `REGULAR`            |
 
 ## Database Security Model
 
-The project uses a compact database-enforced RBAC model:
+The project uses a hybrid database-enforced RBAC model:
 
-- Fixed application role on `AppUser.roleName`, checked by `sp_CheckPermission`.
+- Six immutable system roles remain in `AppUser.roleName` for SQL Server roles, RLS predicates, and the existing fixed permission fast path.
+- Dynamic `Role`, `Permission`, `UserRole`, and `RolePermission` tables make roles and permission assignments visible and editable through the application.
 - Native SQL Server database roles: `ems_regular`, `ems_manager`, `ems_hr_employee`, `ems_hr_manager`, `ems_accounting`, `ems_admin`, and `ems_app_runtime`.
 
-The separate `Role`, `Permission`, `UserRole`, and `RolePermission` tables were removed because this project uses a fixed role matrix instead of user-defined permissions.
+`sp_CheckPermission` first keeps the system-role behavior stable. If a user has a custom non-system role, the procedure resolves access through `UserRole -> RolePermission -> Permission`. `AppUser.roleName` is retained as a denormalized cache so the native SQL Server security layer can still receive the current role through `SESSION_CONTEXT`.
 
 Direct human-facing database roles are denied base-table access to sensitive tables such as `AppUser`, `Employee`, `EmployeeSensitive`, and `AuditLog`. They read through curated views such as `vw_EmployeeDirectory`, `vw_EmployeeWithSensitive`, `vw_PayrollSummary`, and `vw_AuditLogDetail`, with Row-Level Security filtering rows by `SESSION_CONTEXT`.
 
 The `ems_app_runtime` role is intended for the application connection. It retains the permissions needed by the current Prisma/tRPC code paths while stored procedures and triggers enforce authentication lockout, soft deletes, session revocation, audit immutability, and permission checks.
+
+### Admin Role Management
+
+Log in as `an.nguyen@company.vn` / `an`, then open:
+
+- `/admin/users` to create users, assign roles, unlock accounts, and deactivate access.
+- `/admin/roles` to create custom roles and assign or revoke permissions. System roles are visible but locked.
+- `/admin/permissions` to maintain the permission catalog.
+
+The RBAC tables are:
+
+```text
+AppUser 1 -- 1 UserRole * -- 1 Role
+Role    1 -- * RolePermission * -- 1 Permission
+```
+
+Login success and failed-login attempts are written to `AuditLog` as `LOGIN_SUCCESS` and `LOGIN_FAILURE`, so they appear in `/audit`.

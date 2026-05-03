@@ -30,8 +30,13 @@ export const authRouter = router({
     .input(z.object({ email: z.string().email(), password: z.string() }))
     .mutation(async ({ input, ctx }) => {
       const ipAddress = getRequestIp(ctx.req);
+      const userAgentHeader = ctx.req.headers['user-agent'];
+      const userAgent = Array.isArray(userAgentHeader) ? userAgentHeader.join(', ') : userAgentHeader ?? null;
       const [auth] = await ctx.prisma.$queryRaw<AuthenticateResult[]>`
-        EXEC [dbo].[sp_Authenticate] @Email = ${input.email}, @IPAddress = ${ipAddress}
+        EXEC [dbo].[sp_Authenticate]
+          @Email = ${input.email},
+          @IPAddress = ${ipAddress},
+          @UserAgent = ${userAgent}
       `;
 
       if (!auth || auth.authStatus === 'USER_NOT_FOUND') {
@@ -53,7 +58,10 @@ export const authRouter = router({
       const isValid = await bcrypt.compare(input.password, auth.passwordHash);
       if (!isValid) {
         await ctx.prisma.$executeRaw`
-          EXEC [dbo].[sp_RecordLoginFailure] @UserId = ${auth.userId}, @IPAddress = ${ipAddress}
+          EXEC [dbo].[sp_RecordLoginFailure]
+            @UserId = ${auth.userId},
+            @IPAddress = ${ipAddress},
+            @UserAgent = ${userAgent}
         `;
         throw invalidLoginError();
       }
@@ -67,7 +75,8 @@ export const authRouter = router({
           @UserId = ${auth.userId},
           @TokenHash = ${tokenHash},
           @ExpiresAt = ${expiresAt},
-          @IPAddress = ${ipAddress}
+          @IPAddress = ${ipAddress},
+          @UserAgent = ${userAgent}
       `;
 
       const user = await getUserContextById(auth.userId);

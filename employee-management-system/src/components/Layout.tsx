@@ -1,9 +1,9 @@
 import React from 'react';
 import { Outlet, Link, useRouterState, Navigate, useNavigate } from '@tanstack/react-router';
-import { Users, Shield, LayoutDashboard, UserCircle, LogOut } from 'lucide-react';
+import { KeyRound, LayoutDashboard, LogOut, Shield, UserCircle, UserCog, Users } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { canViewAuditLogs } from '../lib/rbac';
-import { cn } from '../lib/utils';
+import { canManageUsersRolesPermissions, canViewAuditLogs } from '../lib/rbac';
+import { cn, formatRoleLabel } from '../lib/utils';
 import { trpc } from '../lib/trpc';
 import { queryClient } from '../lib/trpc';
 
@@ -16,6 +16,15 @@ export const Layout: React.FC = () => {
   const { data: sessionUser, isLoading } = trpc.auth.session.useQuery(undefined, {
     retry: false
   });
+  const userCandidate = currentUser || sessionUser;
+  const hasStaticAuditAccess = !!userCandidate && canViewAuditLogs(userCandidate as any);
+
+  const { data: dynamicAuditAccess } = trpc.permission.check.useQuery(
+    { resource: 'audit_log', action: 'read', scope: 'all' },
+    {
+      enabled: !isLoading && !!userCandidate && !hasStaticAuditAccess,
+    }
+  );
 
   React.useEffect(() => {
     if (sessionUser && !currentUser) {
@@ -33,14 +42,19 @@ export const Layout: React.FC = () => {
     });
   };
 
-  if (isLoading) return <div className="flex h-screen items-center justify-center text-gray-500 text-lg">Authenticating...</div>;
+  if (isLoading) return <div className="flex h-screen items-center justify-center text-gray-500 text-lg">Đang xác thực...</div>;
 
-  const userToUse = currentUser || sessionUser;
+  const userToUse = userCandidate;
   if (!userToUse) return <Navigate to="/login" replace />;
 
+  const canManageAdmin = canManageUsersRolesPermissions(userToUse as any);
+
   const navItems = [
-    { name: 'Dashboard', path: '/', icon: LayoutDashboard, show: true },
-    { name: 'Audit Logs', path: '/audit', icon: Shield, show: canViewAuditLogs(userToUse as any) },
+    { name: 'Tổng quan', path: '/', icon: LayoutDashboard, show: true },
+    { name: 'Nhật ký kiểm toán', path: '/audit', icon: Shield, show: hasStaticAuditAccess || !!dynamicAuditAccess?.hasPermission },
+    { name: 'Người dùng', path: '/admin/users', icon: UserCog, show: canManageAdmin },
+    { name: 'Vai trò', path: '/admin/roles', icon: Shield, show: canManageAdmin },
+    { name: 'Quyền truy cập', path: '/admin/permissions', icon: KeyRound, show: canManageAdmin },
   ];
 
   return (
@@ -49,7 +63,7 @@ export const Layout: React.FC = () => {
       <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
         <div className="h-16 flex items-center px-6 border-b border-gray-200">
           <Users className="w-6 h-6 text-blue-600 mr-2" />
-          <span className="text-lg font-bold text-gray-900">EMS Portal</span>
+          <span className="text-lg font-bold text-gray-900">Cổng EMS</span>
         </div>
         <nav className="flex-1 p-4 space-y-1">
           {navItems.filter(item => item.show).map((item) => {
@@ -79,7 +93,7 @@ export const Layout: React.FC = () => {
         {/* Header */}
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8">
           <h1 className="text-xl font-semibold text-gray-800">
-            {navItems.find(i => i.path === location.pathname)?.name || 'Employee Profile'}
+            {navItems.find(i => i.path === location.pathname)?.name || 'Hồ sơ nhân viên'}
           </h1>
           
             <div className="flex flex-row items-center space-x-4">
@@ -89,13 +103,13 @@ export const Layout: React.FC = () => {
                 disabled={logoutMutation.isPending}
                >
                 <LogOut className="w-4 h-4 mr-2" />
-                Sign Out
+                Đăng xuất
               </button>
             <div className="flex items-center space-x-2 border-l pl-4 border-gray-200">
               <UserCircle className="w-8 h-8 text-gray-400" />
               <div className="flex flex-col">
                 <span className="text-sm font-medium text-gray-700">{(userToUse as any).fullName}</span>
-                <span className="text-xs text-gray-500">{(userToUse as any).role}</span>
+                <span className="text-xs text-gray-500">{formatRoleLabel((userToUse as any).role)}</span>
               </div>
             </div>
           </div>

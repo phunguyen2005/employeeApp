@@ -1,4 +1,44 @@
-import { Employee } from '../types';
+import { Employee, SystemRole, isSystemRole } from '../types';
+
+const staticRolePermissions: Record<SystemRole, string[]> = {
+  REGULAR: ['employee.read.own_department', 'department.read.all'],
+  MANAGER: ['employee.read.own_department', 'employee_sensitive.read.own_department', 'department.read.all'],
+  HR_EMPLOYEE: [
+    'employee.read.all',
+    'employee.create.other_department',
+    'employee.update.other_department',
+    'employee.delete.other_department',
+    'employee_sensitive.read.all',
+    'employee_sensitive.update.other_department',
+    'department.read.all',
+  ],
+  HR_MANAGER: [
+    'employee.read.all',
+    'employee.create.all',
+    'employee.update.all',
+    'employee.delete.all',
+    'employee_sensitive.read.all',
+    'employee_sensitive.update.all',
+    'department.read.all',
+    'department.manage.all',
+    'audit_log.read.all',
+  ],
+  ACCOUNTING: ['employee.read.all', 'employee_sensitive.read.all', 'department.read.all'],
+  ADMIN: ['*'],
+};
+
+const permissionMatches = (granted: string, requested: string) => {
+  if (granted === '*' || granted === requested) return true;
+
+  const [grantedResource, grantedAction, grantedScope] = granted.split('.');
+  const [requestedResource, requestedAction] = requested.split('.');
+  return grantedResource === requestedResource && grantedAction === requestedAction && grantedScope === 'all';
+};
+
+export const hasPermission = (currentUser: Employee, permission: string): boolean => {
+  if (!isSystemRole(currentUser.role)) return false;
+  return staticRolePermissions[currentUser.role].some((granted) => permissionMatches(granted, permission));
+};
 
 export const canEditEmployee = (currentUser: Employee, target: Employee): boolean => {
   if (currentUser.role === 'ADMIN') return true;
@@ -18,7 +58,11 @@ export const canManageDepartments = (currentUser: Employee): boolean => {
 };
 
 export const canViewAuditLogs = (currentUser: Employee): boolean => {
-  return currentUser.role === 'ADMIN' || currentUser.role === 'HR_MANAGER';
+  return hasPermission(currentUser, 'audit_log.read.all');
+};
+
+export const canManageUsersRolesPermissions = (currentUser: Employee): boolean => {
+  return currentUser.role === 'ADMIN';
 };
 
 export const getVisibleFields = (currentUser: Employee, target: Employee): (keyof Employee)[] => {

@@ -7,12 +7,8 @@ import type { Role } from '../types';
 export const prisma = new PrismaClient();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-for-dev';
-const rolePriority: Role[] = ['ADMIN', 'HR_MANAGER', 'HR_EMPLOYEE', 'ACCOUNTING', 'MANAGER', 'REGULAR'];
 
 type DbClient = Prisma.TransactionClient | PrismaClient;
-
-const isRole = (value: string | null | undefined): value is Role =>
-  !!value && rolePriority.includes(value as Role);
 
 export const hashToken = (token: string) =>
   crypto.createHash('sha256').update(token).digest('hex');
@@ -56,7 +52,7 @@ const getEmployeeContext = async (
     const appUser = await tx.appUser.findUnique({ where: { id: userId } });
     if (!appUser?.isActive) return null;
 
-    const role: Role = isRole(appUser.roleName) ? appUser.roleName : 'REGULAR';
+    const role: Role = appUser.roleName?.trim() || 'REGULAR';
     await setDatabaseSessionContext(tx, { userId, role, departmentId: null });
 
     const employee = await tx.employee.findUnique({

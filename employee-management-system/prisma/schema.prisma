@@ -19,9 +19,58 @@ model AppUser {
   createdAt      DateTime  @default(now()) @db.DateTime2
   updatedAt      DateTime  @updatedAt @db.DateTime2
 
-  employee      Employee?
-  sessions      UserSession[]
-  auditLogs     AuditLog[]    @relation("AuditActor")
+  employee  Employee?
+  sessions  UserSession[]
+  auditLogs AuditLog[]    @relation("AuditActor")
+  userRoles UserRole[]
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.UniqueIdentifier
+  name        String   @unique @db.NVarChar(50)
+  description String?  @db.NVarChar(255)
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now()) @db.DateTime2
+  updatedAt   DateTime @updatedAt @db.DateTime2
+
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+}
+
+model Permission {
+  id          String  @id @default(uuid()) @db.UniqueIdentifier
+  resource    String  @db.NVarChar(50)
+  action      String  @db.NVarChar(20)
+  scope       String  @db.NVarChar(30)
+  description String? @db.NVarChar(255)
+
+  rolePermissions RolePermission[]
+
+  @@unique([resource, action, scope])
+}
+
+model RolePermission {
+  roleId       String   @db.UniqueIdentifier
+  permissionId String   @db.UniqueIdentifier
+  grantedAt    DateTime @default(now()) @db.DateTime2
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId     String   @db.UniqueIdentifier
+  roleId     String   @db.UniqueIdentifier
+  assignedAt DateTime @default(now()) @db.DateTime2
+  assignedBy String?  @db.UniqueIdentifier
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role Role    @relation(fields: [roleId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([userId, roleId])
+  @@unique([userId])
 }
 
 model Employee {

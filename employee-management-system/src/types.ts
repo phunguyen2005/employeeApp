@@ -1,5 +1,21 @@
-export type Role = 'REGULAR' | 'MANAGER' | 'HR_EMPLOYEE' | 'HR_MANAGER' | 'ACCOUNTING' | 'ADMIN';
-export type AuditAction = 'CREATE' | 'READ' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | 'LOGIN_FAILED';
+export const SYSTEM_ROLES = ['REGULAR', 'MANAGER', 'HR_EMPLOYEE', 'HR_MANAGER', 'ACCOUNTING', 'ADMIN'] as const;
+
+export type SystemRole = (typeof SYSTEM_ROLES)[number];
+export type Role = SystemRole | (string & {});
+
+export const isSystemRole = (value: unknown): value is SystemRole =>
+  typeof value === 'string' && SYSTEM_ROLES.includes(value as SystemRole);
+
+export type AuditAction =
+  | 'CREATE'
+  | 'READ'
+  | 'UPDATE'
+  | 'DELETE'
+  | 'LOGIN'
+  | 'LOGOUT'
+  | 'LOGIN_FAILED'
+  | 'LOGIN_SUCCESS'
+  | 'LOGIN_FAILURE';
 
 export interface Employee {
   id: string;

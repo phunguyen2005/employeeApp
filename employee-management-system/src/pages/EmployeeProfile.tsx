@@ -19,8 +19,9 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { canCreateDeleteEmployee, canEditEmployee, getVisibleFields } from '../lib/rbac';
-import { cn, formatCurrency } from '../lib/utils';
-import type { Employee, Role } from '../types';
+import { cn, formatCurrency, formatDepartmentName, formatRoleLabel, translateApiError } from '../lib/utils';
+import { isSystemRole } from '../types';
+import type { Employee, Role, SystemRole } from '../types';
 import { trpc } from '../lib/trpc';
 
 type EmployeeProfileInput = {
@@ -56,25 +57,25 @@ type NormalizedEmployee = Employee & {
 
 type FormErrors = Partial<Record<keyof EmployeeFormData, string>>;
 
-const roleOptions: Array<{ value: Role; label: string }> = [
-  { value: 'REGULAR', label: 'Regular' },
-  { value: 'MANAGER', label: 'Manager' },
-  { value: 'HR_EMPLOYEE', label: 'HR Employee' },
-  { value: 'HR_MANAGER', label: 'HR Manager' },
-  { value: 'ACCOUNTING', label: 'Accounting' },
-  { value: 'ADMIN', label: 'Admin' },
+const roleOptions: Array<{ value: SystemRole; label: string }> = [
+  { value: 'REGULAR', label: 'Nhân viên' },
+  { value: 'MANAGER', label: 'Quản lý' },
+  { value: 'HR_EMPLOYEE', label: 'Nhân sự' },
+  { value: 'HR_MANAGER', label: 'Quản lý nhân sự' },
+  { value: 'ACCOUNTING', label: 'Kế toán' },
+  { value: 'ADMIN', label: 'Quản trị viên' },
 ];
 
-const roleLabels: Record<Role, string> = {
-  REGULAR: 'Regular',
-  MANAGER: 'Manager',
-  HR_EMPLOYEE: 'HR Employee',
-  HR_MANAGER: 'HR Manager',
-  ACCOUNTING: 'Accounting',
-  ADMIN: 'Admin',
+const roleLabels: Record<SystemRole, string> = {
+  REGULAR: 'Nhân viên',
+  MANAGER: 'Quản lý',
+  HR_EMPLOYEE: 'Nhân sự',
+  HR_MANAGER: 'Quản lý nhân sự',
+  ACCOUNTING: 'Kế toán',
+  ADMIN: 'Quản trị viên',
 };
 
-const roleBadgeStyles: Record<Role, string> = {
+const roleBadgeStyles: Record<SystemRole, string> = {
   REGULAR: 'border-slate-200 bg-slate-100 text-slate-700',
   MANAGER: 'border-indigo-200 bg-indigo-100 text-indigo-700',
   HR_EMPLOYEE: 'border-cyan-200 bg-cyan-100 text-cyan-800',
@@ -83,8 +84,13 @@ const roleBadgeStyles: Record<Role, string> = {
   ADMIN: 'border-amber-200 bg-amber-100 text-amber-800',
 };
 
-const isRole = (value: unknown): value is Role =>
-  roleOptions.some((option) => option.value === value);
+const normalizeRole = (value: unknown): Role =>
+  typeof value === 'string' && value.trim() ? (value.trim() as Role) : 'REGULAR';
+
+const getRoleLabel = (role: Role) => (isSystemRole(role) ? roleLabels[role] : role);
+
+const getRoleBadgeStyle = (role: Role) =>
+  isSystemRole(role) ? roleBadgeStyles[role] : 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-800';
 
 const createEmptyFormData = (departmentId = ''): EmployeeFormData => ({
   fullName: '',
@@ -113,13 +119,13 @@ const normalizeEmployee = (
 
   return {
     id: employee.id,
-    fullName: employee.fullName?.trim() || 'Restricted employee',
+    fullName: employee.fullName?.trim() || 'Nhân viên bị giới hạn',
     dob: employee.dob || '',
     email: employee.email || '',
     departmentId: employee.departmentId || '',
     salary: typeof employee.salary === 'number' ? employee.salary : 0,
     taxCode: employee.taxCode || '',
-    role: isRole(employee.role) ? employee.role : 'REGULAR',
+    role: normalizeRole(employee.role),
     dobInput: formatDateForInput(employee.dob),
   };
 };
@@ -149,35 +155,35 @@ const getValidationErrors = (
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   if (options.visibleFields.includes('fullName') && !formData.fullName.trim()) {
-    errors.fullName = 'Full name is required.';
+    errors.fullName = 'Vui lòng nhập họ và tên.';
   }
 
   if (options.visibleFields.includes('email')) {
     if (!formData.email.trim()) {
-      errors.email = 'Email address is required.';
+      errors.email = 'Vui lòng nhập địa chỉ email.';
     } else if (!emailPattern.test(formData.email.trim())) {
-      errors.email = 'Use a valid email address.';
+      errors.email = 'Vui lòng nhập email đúng định dạng.';
     }
   }
 
   if (options.visibleFields.includes('dob') && !formData.dob) {
-    errors.dob = 'Date of birth is required.';
+    errors.dob = 'Vui lòng nhập ngày sinh.';
   }
 
   if (options.visibleFields.includes('departmentId') && !formData.departmentId) {
-    errors.departmentId = 'Choose a department.';
+    errors.departmentId = 'Vui lòng chọn phòng ban.';
   }
 
   if (options.visibleFields.includes('salary')) {
     if (formData.salary === '') {
-      errors.salary = 'Salary is required.';
+      errors.salary = 'Vui lòng nhập lương.';
     } else if (Number.isNaN(Number(formData.salary)) || Number(formData.salary) < 0) {
-      errors.salary = 'Salary must be a non-negative number.';
+      errors.salary = 'Lương phải là số không âm.';
     }
   }
 
   if (options.isNew && !formData.password) {
-    errors.password = 'A password is required for new employees.';
+    errors.password = 'Vui lòng nhập mật khẩu cho nhân viên mới.';
   }
 
   return errors;
@@ -212,7 +218,7 @@ export const EmployeeProfile: React.FC = () => {
       navigate({ to: '/' });
     },
     onError: (error) => {
-      setStatusMessage(error.message || 'Unable to create the employee right now.');
+      setStatusMessage(translateApiError(error.message, 'Hiện chưa thể tạo nhân viên. Vui lòng thử lại.'));
     },
   });
 
@@ -223,7 +229,7 @@ export const EmployeeProfile: React.FC = () => {
       navigate({ to: '/' });
     },
     onError: (error) => {
-      setStatusMessage(error.message || 'Unable to save your changes right now.');
+      setStatusMessage(translateApiError(error.message, 'Hiện chưa thể lưu thay đổi. Vui lòng thử lại.'));
     },
   });
 
@@ -233,7 +239,7 @@ export const EmployeeProfile: React.FC = () => {
       navigate({ to: '/' });
     },
     onError: (error) => {
-      setStatusMessage(error.message || 'Unable to delete the employee right now.');
+      setStatusMessage(translateApiError(error.message, 'Hiện chưa thể xóa nhân viên. Vui lòng thử lại.'));
     },
   });
 
@@ -242,7 +248,7 @@ export const EmployeeProfile: React.FC = () => {
       (departments as DepartmentInput[])
         .map((department) => ({
           id: department.id ?? '',
-          name: department.name?.trim() || 'Unnamed department',
+          name: formatDepartmentName(department.name, 'Phòng ban chưa có tên'),
         }))
         .filter((department) => department.id),
     [departments]
@@ -305,14 +311,14 @@ export const EmployeeProfile: React.FC = () => {
     visibleFields.includes('fullName') && formData.fullName
       ? formData.fullName
       : isNew
-        ? 'New employee'
-        : 'Restricted employee';
+        ? 'Nhân viên mới'
+        : 'Nhân viên bị giới hạn';
 
-  const displayRole = visibleFields.includes('role') ? roleLabels[formData.role] : 'Restricted';
+  const displayRole = visibleFields.includes('role') ? getRoleLabel(formData.role) : 'Bị giới hạn';
   const displayDepartment =
     visibleFields.includes('departmentId') && formData.departmentId
-      ? normalizedDepartments.find((department) => department.id === formData.departmentId)?.name || 'Unassigned'
-      : 'Restricted';
+      ? normalizedDepartments.find((department) => department.id === formData.departmentId)?.name || 'Chưa phân phòng ban'
+      : 'Bị giới hạn';
 
   const showDeleteAction = !isNew && canCreateDeleteEmployee(currentUser);
 
@@ -325,6 +331,10 @@ export const EmployeeProfile: React.FC = () => {
     if (name === 'role') return isNew;
     return true;
   };
+
+  const visibleRoleOptions = isSystemRole(formData.role)
+    ? roleOptions
+    : [...roleOptions, { value: formData.role, label: formatRoleLabel(formData.role) }];
 
   const handleBack = () => {
     navigate({ to: '/' });
@@ -357,6 +367,7 @@ export const EmployeeProfile: React.FC = () => {
         dob: new Date(formData.dob).toISOString(),
         salary: Number(formData.salary),
         taxCode: formData.taxCode.trim(),
+        role: isSystemRole(formData.role) ? formData.role : 'REGULAR',
       });
       return;
     }
@@ -375,7 +386,7 @@ export const EmployeeProfile: React.FC = () => {
   };
 
   const handleDelete = () => {
-    if (!window.confirm('Are you sure you want to delete this employee?')) return;
+    if (!window.confirm('Bạn có chắc muốn xóa nhân viên này không?')) return;
     setStatusMessage('');
     deleteMutation.mutate({ id });
   };
@@ -411,7 +422,7 @@ export const EmployeeProfile: React.FC = () => {
           </label>
           {!isEditable && (
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
-              Read only
+              Chỉ xem
             </span>
           )}
         </div>
@@ -463,7 +474,7 @@ export const EmployeeProfile: React.FC = () => {
               type="button"
               onClick={() => setShowPassword((current) => !current)}
               className="rounded-full p-1 text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
             >
               {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </button>
@@ -473,7 +484,7 @@ export const EmployeeProfile: React.FC = () => {
         <p className={cn('text-sm', error ? 'text-red-600' : 'text-slate-500')}>
           {error ||
             helperText ||
-            (isEditable ? 'This field can be updated here.' : 'This value is visible but not editable from this page.')}
+            (isEditable ? 'Bạn có thể cập nhật trường này tại đây.' : 'Giá trị này chỉ được hiển thị và không thể sửa tại màn hình này.')}
         </p>
       </div>
     );
@@ -502,7 +513,7 @@ export const EmployeeProfile: React.FC = () => {
           <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center gap-3 text-slate-500">
               <Loader2 className="h-5 w-5 animate-spin text-cyan-600" />
-              Loading employee details...
+              Đang tải thông tin nhân viên...
             </div>
           </div>
         </div>
@@ -519,16 +530,16 @@ export const EmployeeProfile: React.FC = () => {
           className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-slate-800"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to dashboard
+          Quay lại tổng quan
         </button>
 
         <div className="rounded-[2rem] border border-red-200 bg-white p-8 text-center shadow-sm">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-red-600">
             <AlertCircle className="h-6 w-6" />
           </div>
-          <h2 className="mt-5 text-2xl font-semibold text-slate-900">Employee not available</h2>
+          <h2 className="mt-5 text-2xl font-semibold text-slate-900">Không thể mở hồ sơ nhân viên</h2>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            This record could not be found, or your current access level does not allow you to open it.
+            Không tìm thấy hồ sơ này, hoặc quyền hiện tại của bạn không cho phép mở hồ sơ.
           </p>
         </div>
       </div>
@@ -544,16 +555,16 @@ export const EmployeeProfile: React.FC = () => {
           className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-slate-800"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to dashboard
+          Quay lại tổng quan
         </button>
 
         <div className="rounded-[2rem] border border-amber-200 bg-white p-8 text-center shadow-sm">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
             <ShieldCheck className="h-6 w-6" />
           </div>
-          <h2 className="mt-5 text-2xl font-semibold text-slate-900">Profile access is restricted</h2>
+          <h2 className="mt-5 text-2xl font-semibold text-slate-900">Quyền xem hồ sơ bị giới hạn</h2>
           <p className="mt-2 text-sm leading-6 text-slate-500">
-            Your role does not have permission to view fields on this employee profile.
+            Vai trò hiện tại của bạn không có quyền xem các trường trong hồ sơ nhân viên này.
           </p>
         </div>
       </div>
@@ -568,7 +579,7 @@ export const EmployeeProfile: React.FC = () => {
         className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-slate-800"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to dashboard
+        Quay lại tổng quan
       </button>
 
       <section className="overflow-hidden rounded-[2rem] bg-gradient-to-br from-slate-950 via-blue-950 to-cyan-900 text-white shadow-[0_24px_60px_-24px_rgba(8,47,73,0.75)]">
@@ -576,7 +587,7 @@ export const EmployeeProfile: React.FC = () => {
           <div className="space-y-5">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-sm text-cyan-100 backdrop-blur-sm">
               <ShieldCheck className="h-4 w-4" />
-              {canEdit ? 'Editable access' : 'View-only access'}
+              {canEdit ? 'Có quyền chỉnh sửa' : 'Chỉ được xem'}
             </div>
 
             <div className="flex items-start gap-4">
@@ -586,15 +597,15 @@ export const EmployeeProfile: React.FC = () => {
 
               <div>
                 <p className="text-sm uppercase tracking-[0.28em] text-cyan-200">
-                  {isNew ? 'Create Employee' : 'Employee Profile'}
+                  {isNew ? 'Tạo nhân viên' : 'Hồ sơ nhân viên'}
                 </p>
                 <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
                   {displayName}
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-200 sm:text-base">
                   {isNew
-                    ? 'Set up the employee record with the required identity, department, and compensation details.'
-                    : 'Review employee information with a clearer layout for personal data, work details, and compensation visibility.'}
+                    ? 'Thiết lập hồ sơ nhân viên với thông tin định danh, phòng ban và lương cần thiết.'
+                    : 'Xem thông tin nhân viên trong bố cục rõ ràng cho dữ liệu cá nhân, công việc và quyền xem lương.'}
                 </p>
               </div>
             </div>
@@ -604,14 +615,14 @@ export const EmployeeProfile: React.FC = () => {
                 className={cn(
                   'inline-flex rounded-full border px-3 py-1 text-sm font-medium',
                   visibleFields.includes('role')
-                    ? roleBadgeStyles[formData.role]
+                    ? getRoleBadgeStyle(formData.role)
                     : 'border-white/15 bg-white/10 text-slate-200'
                 )}
               >
                 {displayRole}
               </span>
               <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-sm text-slate-200">
-                {isNew ? 'New record' : `Employee ID: ${id}`}
+                {isNew ? 'Hồ sơ mới' : `Mã nhân viên: ${id}`}
               </span>
               <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-sm text-slate-200">
                 {displayDepartment}
@@ -621,29 +632,29 @@ export const EmployeeProfile: React.FC = () => {
 
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
             <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
-              <p className="text-sm text-slate-200">Visible fields</p>
+              <p className="text-sm text-slate-200">Trường được hiển thị</p>
               <p className="mt-3 text-3xl font-semibold text-white">{visibleFields.length}</p>
-              <p className="mt-1 text-xs text-slate-300">Based on your current permissions.</p>
+              <p className="mt-1 text-xs text-slate-300">Dựa trên quyền hiện tại của bạn.</p>
             </div>
 
             <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
-              <p className="text-sm text-slate-200">Editable state</p>
-              <p className="mt-3 text-3xl font-semibold text-white">{canEdit ? 'Yes' : 'No'}</p>
+              <p className="text-sm text-slate-200">Trạng thái chỉnh sửa</p>
+              <p className="mt-3 text-3xl font-semibold text-white">{canEdit ? 'Có' : 'Không'}</p>
               <p className="mt-1 text-xs text-slate-300">
-                Role and password controls are only editable during creation.
+                Vai trò và mật khẩu chỉ có thể chỉnh sửa khi tạo mới.
               </p>
             </div>
 
             <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
-              <p className="text-sm text-slate-200">Salary preview</p>
+              <p className="text-sm text-slate-200">Xem trước lương</p>
               <p className="mt-3 text-3xl font-semibold text-white">
                 {visibleFields.includes('salary') &&
                 formData.salary !== '' &&
                 !Number.isNaN(Number(formData.salary))
                   ? formatCurrency(Number(formData.salary))
-                  : 'Restricted'}
+                  : 'Bị giới hạn'}
               </p>
-              <p className="mt-1 text-xs text-slate-300">Reflects the current form value.</p>
+              <p className="mt-1 text-xs text-slate-300">Phản ánh giá trị hiện có trong biểu mẫu.</p>
             </div>
           </div>
         </div>
@@ -658,8 +669,8 @@ export const EmployeeProfile: React.FC = () => {
 
       {!canEdit && (
         <div className="rounded-[1.5rem] border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
-          This profile is currently view only. You can review the fields your role exposes, but edits are disabled
-          on this screen.
+          Hồ sơ này hiện chỉ cho phép xem. Bạn có thể xem các trường mà vai trò của bạn được phép truy cập,
+          nhưng không thể chỉnh sửa tại màn hình này.
         </div>
       )}
 
@@ -667,55 +678,55 @@ export const EmployeeProfile: React.FC = () => {
         <form id="employee-profile-form" onSubmit={handleSubmit} className="space-y-6">
           <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
             <div className="mb-6">
-              <p className="text-sm font-medium text-cyan-700">Identity</p>
-              <h2 className="mt-2 text-xl font-semibold text-slate-900">Personal information</h2>
+              <p className="text-sm font-medium text-cyan-700">Định danh</p>
+              <h2 className="mt-2 text-xl font-semibold text-slate-900">Thông tin cá nhân</h2>
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                Keep the employee's core identity details accurate and easy to review.
+                Đảm bảo thông tin định danh cốt lõi của nhân viên chính xác và dễ kiểm tra.
               </p>
             </div>
 
             <div className="grid gap-5 md:grid-cols-2">
               {renderField({
                 name: 'fullName',
-                label: 'Full name',
+                label: 'Họ và tên',
                 icon: UserRound,
-                helperText: "Use the employee's display name as it should appear in the system.",
+                helperText: 'Nhập tên hiển thị của nhân viên trong hệ thống.',
               })}
               {renderField({
                 name: 'email',
-                label: 'Email address',
+                label: 'Địa chỉ email',
                 icon: Mail,
                 type: 'email',
-                helperText: 'This email is used for identification and sign-in.',
+                helperText: 'Email này được dùng để định danh và đăng nhập.',
               })}
               {renderField({
                 name: 'dob',
-                label: 'Date of birth',
+                label: 'Ngày sinh',
                 icon: CalendarDays,
                 type: 'date',
               })}
               {renderField({
                 name: 'taxCode',
-                label: 'Tax code',
+                label: 'Mã số thuế',
                 icon: IdCard,
-                helperText: 'Use the payroll tax identifier assigned to this employee.',
+                helperText: 'Nhập mã số thuế được gán cho nhân viên này.',
               })}
             </div>
           </section>
 
           <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
             <div className="mb-6">
-              <p className="text-sm font-medium text-cyan-700">Work setup</p>
-              <h2 className="mt-2 text-xl font-semibold text-slate-900">Department and role</h2>
+              <p className="text-sm font-medium text-cyan-700">Thiết lập công việc</p>
+              <h2 className="mt-2 text-xl font-semibold text-slate-900">Phòng ban và vai trò</h2>
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                These settings control where the employee belongs and how access is represented in the UI.
+                Các thiết lập này xác định nhân viên thuộc phòng ban nào và quyền truy cập được thể hiện ra sao.
               </p>
             </div>
 
             <div className="grid gap-5 md:grid-cols-2">
               {renderField({
                 name: 'departmentId',
-                label: 'Department',
+                label: 'Phòng ban',
                 icon: Building2,
                 options: normalizedDepartments.map((department) => ({
                   value: department.id,
@@ -724,33 +735,33 @@ export const EmployeeProfile: React.FC = () => {
               })}
               {renderField({
                 name: 'role',
-                label: 'Role',
+                label: 'Vai trò',
                 icon: ShieldCheck,
-                options: roleOptions,
+                options: visibleRoleOptions,
                 helperText: isNew
-                  ? 'Choose the role before creating the employee.'
-                  : 'Role is shown for context and is not editable from this screen.',
+                  ? 'Chọn vai trò trước khi tạo nhân viên.'
+                  : 'Vai trò chỉ hiển thị để tham khảo và không thể sửa tại màn hình này.',
               })}
             </div>
           </section>
 
           <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
             <div className="mb-6">
-              <p className="text-sm font-medium text-cyan-700">Compensation</p>
-              <h2 className="mt-2 text-xl font-semibold text-slate-900">Salary details</h2>
+              <p className="text-sm font-medium text-cyan-700">Thu nhập</p>
+              <h2 className="mt-2 text-xl font-semibold text-slate-900">Thông tin lương</h2>
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                Compensation values are surfaced with clearer formatting and permission-aware visibility.
+                Lương được hiển thị theo định dạng VNĐ và tuân theo quyền truy cập hiện tại.
               </p>
             </div>
 
             <div className="grid gap-5 md:grid-cols-2">
               {renderField({
                 name: 'salary',
-                label: 'Salary (USD)',
+                label: 'Lương (VNĐ)',
                 icon: BriefcaseBusiness,
                 type: 'number',
                 inputMode: 'decimal',
-                helperText: 'Enter the annual salary amount in USD.',
+                helperText: 'Nhập số tiền lương bằng VNĐ.',
               })}
             </div>
           </section>
@@ -758,20 +769,20 @@ export const EmployeeProfile: React.FC = () => {
           {isNew && (
             <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
               <div className="mb-6">
-                <p className="text-sm font-medium text-cyan-700">Security</p>
-                <h2 className="mt-2 text-xl font-semibold text-slate-900">Initial sign-in details</h2>
+                <p className="text-sm font-medium text-cyan-700">Bảo mật</p>
+                <h2 className="mt-2 text-xl font-semibold text-slate-900">Thông tin đăng nhập ban đầu</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Set the starting password used when the employee first signs in.
+                  Thiết lập mật khẩu ban đầu để nhân viên đăng nhập lần đầu.
                 </p>
               </div>
 
               <div className="grid gap-5 md:grid-cols-2">
                 {renderField({
                   name: 'password',
-                  label: 'Password',
+                  label: 'Mật khẩu',
                   icon: Lock,
                   type: showPassword ? 'text' : 'password',
-                  helperText: 'This field is only available during employee creation.',
+                  helperText: 'Trường này chỉ khả dụng khi tạo nhân viên mới.',
                 })}
               </div>
             </section>
@@ -780,12 +791,12 @@ export const EmployeeProfile: React.FC = () => {
 
         <aside className="space-y-6">
           <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-sm font-medium text-cyan-700">Profile summary</p>
+            <p className="text-sm font-medium text-cyan-700">Tóm tắt hồ sơ</p>
             <div className="mt-5 space-y-4 text-sm text-slate-600">
               <div className="flex items-start gap-3">
                 <UserRound className="mt-0.5 h-5 w-5 text-slate-400" />
                 <div>
-                  <p className="font-medium text-slate-900">Name</p>
+                  <p className="font-medium text-slate-900">Họ và tên</p>
                   <p>{displayName}</p>
                 </div>
               </div>
@@ -793,7 +804,7 @@ export const EmployeeProfile: React.FC = () => {
               <div className="flex items-start gap-3">
                 <Building2 className="mt-0.5 h-5 w-5 text-slate-400" />
                 <div>
-                  <p className="font-medium text-slate-900">Department</p>
+                  <p className="font-medium text-slate-900">Phòng ban</p>
                   <p>{displayDepartment}</p>
                 </div>
               </div>
@@ -801,7 +812,7 @@ export const EmployeeProfile: React.FC = () => {
               <div className="flex items-start gap-3">
                 <ShieldCheck className="mt-0.5 h-5 w-5 text-slate-400" />
                 <div>
-                  <p className="font-medium text-slate-900">Role</p>
+                  <p className="font-medium text-slate-900">Vai trò</p>
                   <p>{displayRole}</p>
                 </div>
               </div>
@@ -809,15 +820,15 @@ export const EmployeeProfile: React.FC = () => {
               <div className="flex items-start gap-3">
                 <IdCard className="mt-0.5 h-5 w-5 text-slate-400" />
                 <div>
-                  <p className="font-medium text-slate-900">Employee ID</p>
-                  <p>{isNew ? 'Assigned after creation' : id}</p>
+                  <p className="font-medium text-slate-900">Mã nhân viên</p>
+                  <p>{isNew ? 'Sẽ được cấp sau khi tạo' : id}</p>
                 </div>
               </div>
             </div>
           </section>
 
           <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-sm font-medium text-cyan-700">Actions</p>
+            <p className="text-sm font-medium text-cyan-700">Thao tác</p>
             <div className="mt-5 space-y-3">
               {canEdit && (
                 <button
@@ -832,7 +843,7 @@ export const EmployeeProfile: React.FC = () => {
                   {!(createMutation.isPending || updateMutation.isPending) && (
                     <Save className="h-4 w-4" />
                   )}
-                  {isNew ? 'Create employee' : 'Save changes'}
+                  {isNew ? 'Tạo nhân viên' : 'Lưu thay đổi'}
                 </button>
               )}
 
@@ -848,13 +859,13 @@ export const EmployeeProfile: React.FC = () => {
                   ) : (
                     <Trash2 className="h-4 w-4" />
                   )}
-                  {deleteMutation.isPending ? 'Deleting employee...' : 'Delete employee'}
+                  {deleteMutation.isPending ? 'Đang xóa nhân viên...' : 'Xóa nhân viên'}
                 </button>
               )}
 
               {!canEdit && !showDeleteAction && (
                 <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                  No edit actions are available for this employee under your current permissions.
+                  Quyền hiện tại của bạn không có thao tác chỉnh sửa nào cho nhân viên này.
                 </p>
               )}
             </div>

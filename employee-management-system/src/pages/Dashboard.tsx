@@ -15,32 +15,31 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { canCreateDeleteEmployee, canViewEmployee, getVisibleFields } from '../lib/rbac';
-import { cn, formatCurrency } from '../lib/utils';
+import { cn, formatCurrency, formatDepartmentName } from '../lib/utils';
 import { trpc } from '../lib/trpc';
-import type { Employee, Role } from '../types';
+import { isSystemRole } from '../types';
+import type { Employee, Role, SystemRole } from '../types';
 
-const roleValues: Role[] = ['REGULAR', 'MANAGER', 'HR_EMPLOYEE', 'HR_MANAGER', 'ACCOUNTING', 'ADMIN'];
-
-const roleOptions: Array<{ value: 'ALL' | Role; label: string }> = [
-  { value: 'ALL', label: 'All Roles' },
-  { value: 'REGULAR', label: 'Regular' },
-  { value: 'MANAGER', label: 'Manager' },
-  { value: 'HR_EMPLOYEE', label: 'HR Employee' },
-  { value: 'HR_MANAGER', label: 'HR Manager' },
-  { value: 'ACCOUNTING', label: 'Accounting' },
-  { value: 'ADMIN', label: 'Admin' },
+const roleOptions: Array<{ value: 'ALL' | SystemRole; label: string }> = [
+  { value: 'ALL', label: 'Tất cả vai trò' },
+  { value: 'REGULAR', label: 'Nhân viên' },
+  { value: 'MANAGER', label: 'Quản lý' },
+  { value: 'HR_EMPLOYEE', label: 'Nhân sự' },
+  { value: 'HR_MANAGER', label: 'Quản lý nhân sự' },
+  { value: 'ACCOUNTING', label: 'Kế toán' },
+  { value: 'ADMIN', label: 'Quản trị viên' },
 ];
 
-const roleLabels: Record<Role, string> = {
-  REGULAR: 'Regular',
-  MANAGER: 'Manager',
-  HR_EMPLOYEE: 'HR Employee',
-  HR_MANAGER: 'HR Manager',
-  ACCOUNTING: 'Accounting',
-  ADMIN: 'Admin',
+const roleLabels: Record<SystemRole, string> = {
+  REGULAR: 'Nhân viên',
+  MANAGER: 'Quản lý',
+  HR_EMPLOYEE: 'Nhân sự',
+  HR_MANAGER: 'Quản lý nhân sự',
+  ACCOUNTING: 'Kế toán',
+  ADMIN: 'Quản trị viên',
 };
 
-const roleBadgeStyles: Record<Role, string> = {
+const roleBadgeStyles: Record<SystemRole, string> = {
   REGULAR: 'bg-slate-100 text-slate-700 border-slate-200',
   MANAGER: 'bg-indigo-100 text-indigo-700 border-indigo-200',
   HR_EMPLOYEE: 'bg-cyan-100 text-cyan-800 border-cyan-200',
@@ -60,20 +59,26 @@ type DashboardEmployeeInput = {
   role?: string | null;
 };
 
-const isRole = (value: unknown): value is Role => roleValues.includes(value as Role);
+const normalizeRole = (value: unknown): Role =>
+  typeof value === 'string' && value.trim() ? (value.trim() as Role) : 'REGULAR';
+
+const getRoleLabel = (role: Role) => (isSystemRole(role) ? roleLabels[role] : role);
+
+const getRoleBadgeStyle = (role: Role) =>
+  isSystemRole(role) ? roleBadgeStyles[role] : 'bg-fuchsia-50 text-fuchsia-800 border-fuchsia-200';
 
 const buildSafeEmployee = (rawEmployee: DashboardEmployeeInput | null | undefined): Employee | null => {
   if (!rawEmployee?.id) return null;
 
   return {
     id: rawEmployee.id,
-    fullName: rawEmployee.fullName?.trim() || 'Unnamed employee',
+    fullName: rawEmployee.fullName?.trim() || 'Nhân viên chưa có tên',
     dob: rawEmployee.dob || '',
     email: rawEmployee.email || '',
     departmentId: rawEmployee.departmentId || '',
     salary: typeof rawEmployee.salary === 'number' ? rawEmployee.salary : 0,
     taxCode: rawEmployee.taxCode || '',
-    role: isRole(rawEmployee.role) ? rawEmployee.role : 'REGULAR',
+    role: normalizeRole(rawEmployee.role),
   };
 };
 
@@ -93,7 +98,7 @@ export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [deptFilter, setDeptFilter] = useState('ALL');
-  const [roleFilter, setRoleFilter] = useState<'ALL' | Role>('ALL');
+  const [roleFilter, setRoleFilter] = useState<'ALL' | SystemRole>('ALL');
   const deferredSearchTerm = useDeferredValue(searchTerm.trim().toLowerCase());
 
   const { data: employees = [], isLoading: isLoadingEmployees } = trpc.employee.getAll.useQuery(undefined, {
@@ -110,7 +115,7 @@ export const Dashboard: React.FC = () => {
   const normalizedDepartments = departments
     .map((department) => ({
       id: department.id ?? '',
-      name: department.name?.trim() || 'Unnamed department',
+      name: formatDepartmentName(department.name, 'Phòng ban chưa có tên'),
     }))
     .filter((department) => department.id);
 
@@ -128,11 +133,11 @@ export const Dashboard: React.FC = () => {
 
     const visibleFields = getVisibleFields(currentUser, employee);
     const departmentName =
-      normalizedDepartments.find((department) => department.id === employee.departmentId)?.name || 'Unassigned';
+      normalizedDepartments.find((department) => department.id === employee.departmentId)?.name || 'Chưa phân phòng ban';
 
     const matchesSearch =
       !deferredSearchTerm ||
-      [employee.fullName, employee.id, employee.email, departmentName, roleLabels[employee.role]]
+      [employee.fullName, employee.id, employee.email, departmentName, getRoleLabel(employee.role)]
         .join(' ')
         .toLowerCase()
         .includes(deferredSearchTerm);
@@ -187,7 +192,7 @@ export const Dashboard: React.FC = () => {
         <div className="flex h-56 items-center justify-center rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center gap-3 text-slate-500">
             <Loader2 className="h-6 w-6 animate-spin text-cyan-600" />
-            Loading dashboard data...
+            Đang tải dữ liệu tổng quan...
           </div>
         </div>
       </div>
@@ -201,15 +206,15 @@ export const Dashboard: React.FC = () => {
           <div className="space-y-5">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-sm text-cyan-100 backdrop-blur-sm">
               <ShieldCheck className="h-4 w-4" />
-              {roleLabels[currentUser.role]} access
+              Quyền truy cập: {getRoleLabel(currentUser.role)}
             </div>
             <div className="space-y-3">
               <h2 className="max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">
-                Employee records built for faster scanning and clearer access decisions.
+                Hồ sơ nhân viên được trình bày để dễ rà soát và phân quyền rõ ràng hơn.
               </h2>
               <p className="max-w-2xl text-sm leading-7 text-slate-200 sm:text-base">
-                Search, filter, and review the employee directory with a cleaner layout that keeps key details
-                visible without crowding the page.
+                Tìm kiếm, lọc và xem danh sách nhân viên trong bố cục gọn gàng, giúp thông tin quan trọng
+                luôn dễ theo dõi.
               </p>
             </div>
           </div>
@@ -217,29 +222,29 @@ export const Dashboard: React.FC = () => {
           <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
             <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
               <div className="flex items-center justify-between text-sm text-slate-200">
-                <span>Visible employees</span>
+                <span>Nhân viên hiển thị</span>
                 <Users className="h-4 w-4" />
               </div>
               <p className="mt-3 text-3xl font-semibold text-white">{filteredEmployees.length}</p>
-              <p className="mt-1 text-xs text-slate-300">Based on your current role and filters.</p>
+              <p className="mt-1 text-xs text-slate-300">Dựa trên vai trò và bộ lọc hiện tại.</p>
             </div>
 
             <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
               <div className="flex items-center justify-between text-sm text-slate-200">
-                <span>Departments</span>
+                <span>Phòng ban</span>
                 <Building2 className="h-4 w-4" />
               </div>
               <p className="mt-3 text-3xl font-semibold text-white">{visibleDepartmentCount}</p>
-              <p className="mt-1 text-xs text-slate-300">Distinct teams in the current result set.</p>
+              <p className="mt-1 text-xs text-slate-300">Số phòng ban trong kết quả hiện tại.</p>
             </div>
 
             <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur-sm">
               <div className="flex items-center justify-between text-sm text-slate-200">
-                <span>Salary visibility</span>
+                <span>Lương được hiển thị</span>
                 <BriefcaseBusiness className="h-4 w-4" />
               </div>
               <p className="mt-3 text-3xl font-semibold text-white">{visibleSalaryCount}</p>
-              <p className="mt-1 text-xs text-slate-300">Records where compensation is viewable.</p>
+              <p className="mt-1 text-xs text-slate-300">Số hồ sơ bạn được phép xem lương.</p>
             </div>
           </div>
         </div>
@@ -250,7 +255,7 @@ export const Dashboard: React.FC = () => {
           <div className="flex-1 space-y-4">
             <div className="flex items-center gap-2 text-sm font-medium text-slate-600">
               <SlidersHorizontal className="h-4 w-4 text-cyan-600" />
-              Filters and search
+              Bộ lọc và tìm kiếm
             </div>
 
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1.5fr),minmax(220px,0.8fr),minmax(220px,0.8fr)]">
@@ -258,7 +263,7 @@ export const Dashboard: React.FC = () => {
                 <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Search by employee name, ID, email, department, or role"
+                  placeholder="Tìm theo tên, mã nhân viên, email, phòng ban hoặc vai trò"
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-12 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-100"
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
@@ -268,7 +273,7 @@ export const Dashboard: React.FC = () => {
                     type="button"
                     onClick={() => setSearchTerm('')}
                     className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
-                    aria-label="Clear search"
+                    aria-label="Xóa nội dung tìm kiếm"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -279,9 +284,9 @@ export const Dashboard: React.FC = () => {
                 className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-100"
                 value={deptFilter}
                 onChange={(event) => setDeptFilter(event.target.value)}
-                aria-label="Filter by department"
+                aria-label="Lọc theo phòng ban"
               >
-                <option value="ALL">All Departments</option>
+                <option value="ALL">Tất cả phòng ban</option>
                 {normalizedDepartments.map((department) => (
                   <option key={department.id} value={department.id}>
                     {department.name}
@@ -292,8 +297,8 @@ export const Dashboard: React.FC = () => {
               <select
                 className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-100"
                 value={roleFilter}
-                onChange={(event) => setRoleFilter(event.target.value as 'ALL' | Role)}
-                aria-label="Filter by role"
+                onChange={(event) => setRoleFilter(event.target.value as 'ALL' | SystemRole)}
+                aria-label="Lọc theo vai trò"
               >
                 {roleOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -310,7 +315,7 @@ export const Dashboard: React.FC = () => {
               onClick={handleResetFilters}
               className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
             >
-              Reset filters
+              Đặt lại bộ lọc
             </button>
 
             {canCreateEmployee && (
@@ -320,7 +325,7 @@ export const Dashboard: React.FC = () => {
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 focus:outline-none focus:ring-4 focus:ring-slate-200"
               >
                 <Plus className="h-4 w-4" />
-                New employee
+                Thêm nhân viên
               </button>
             )}
           </div>
@@ -328,18 +333,16 @@ export const Dashboard: React.FC = () => {
 
         <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
           <p>
-            Showing <span className="font-semibold text-slate-900">{filteredEmployees.length}</span> employee
-            {filteredEmployees.length === 1 ? '' : 's'}
+            Đang hiển thị <span className="font-semibold text-slate-900">{filteredEmployees.length}</span> nhân viên
             {activeFilterCount > 0 && (
               <>
                 {' '}
-                with <span className="font-semibold text-slate-900">{activeFilterCount}</span> active filter
-                {activeFilterCount === 1 ? '' : 's'}
+                với <span className="font-semibold text-slate-900">{activeFilterCount}</span> bộ lọc đang áp dụng
               </>
             )}
             .
           </p>
-          <p>{deferredSearchTerm ? `Search synced for "${searchTerm.trim()}".` : 'Results update as you type.'}</p>
+          <p>{deferredSearchTerm ? `Đã đồng bộ tìm kiếm cho "${searchTerm.trim()}".` : 'Kết quả cập nhật khi bạn nhập.'}</p>
         </div>
       </section>
 
@@ -350,19 +353,19 @@ export const Dashboard: React.FC = () => {
               <thead className="bg-slate-50/80">
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    Employee
+                    Nhân viên
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    Department
+                    Phòng ban
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    Role
+                    Vai trò
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    Salary
+                    Lương
                   </th>
                   <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                    Action
+                    Thao tác
                   </th>
                 </tr>
               </thead>
@@ -382,27 +385,27 @@ export const Dashboard: React.FC = () => {
                           </div>
                           <div>
                             <p className="text-sm font-semibold text-slate-900">
-                              {canSeeFullName ? employee.fullName : 'Hidden by access policy'}
+                              {canSeeFullName ? employee.fullName : 'Ẩn theo chính sách truy cập'}
                             </p>
-                            <p className="mt-1 text-sm text-slate-500">ID: {employee.id}</p>
+                            <p className="mt-1 text-sm text-slate-500">Mã nhân viên: {employee.id}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-700">
-                        {canSeeDepartment ? departmentName : 'Hidden'}
+                        {canSeeDepartment ? departmentName : 'Đã ẩn'}
                       </td>
                       <td className="px-6 py-4">
                         <span
                           className={cn(
                             'inline-flex rounded-full border px-3 py-1 text-xs font-semibold',
-                            canSeeRole ? roleBadgeStyles[employee.role] : 'border-slate-200 bg-slate-100 text-slate-500'
+                            canSeeRole ? getRoleBadgeStyle(employee.role) : 'border-slate-200 bg-slate-100 text-slate-500'
                           )}
                         >
-                          {canSeeRole ? roleLabels[employee.role] : 'Hidden'}
+                          {canSeeRole ? getRoleLabel(employee.role) : 'Đã ẩn'}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm font-medium text-slate-700">
-                        {canSeeSalary ? formatCurrency(employee.salary ?? 0) : 'Restricted'}
+                        {canSeeSalary ? formatCurrency(employee.salary ?? 0) : 'Bị giới hạn'}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex justify-end">
@@ -412,7 +415,7 @@ export const Dashboard: React.FC = () => {
                             className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
                           >
                             <Eye className="h-4 w-4" />
-                            View profile
+                            Xem hồ sơ
                           </button>
                         </div>
                       </td>
@@ -443,33 +446,33 @@ export const Dashboard: React.FC = () => {
                     </div>
                     <div>
                       <p className="text-base font-semibold text-slate-900">
-                        {canSeeFullName ? employee.fullName : 'Hidden by access policy'}
+                        {canSeeFullName ? employee.fullName : 'Ẩn theo chính sách truy cập'}
                       </p>
-                      <p className="mt-1 text-sm text-slate-500">Employee ID: {employee.id}</p>
+                      <p className="mt-1 text-sm text-slate-500">Mã nhân viên: {employee.id}</p>
                     </div>
                   </div>
 
                   <span
                     className={cn(
                       'inline-flex rounded-full border px-3 py-1 text-xs font-semibold',
-                      canSeeRole ? roleBadgeStyles[employee.role] : 'border-slate-200 bg-slate-100 text-slate-500'
+                      canSeeRole ? getRoleBadgeStyle(employee.role) : 'border-slate-200 bg-slate-100 text-slate-500'
                     )}
                   >
-                    {canSeeRole ? roleLabels[employee.role] : 'Hidden'}
+                    {canSeeRole ? getRoleLabel(employee.role) : 'Đã ẩn'}
                   </span>
                 </div>
 
                 <div className="mt-5 grid gap-3 rounded-3xl bg-slate-50 p-4 text-sm text-slate-600 sm:grid-cols-2">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Department</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Phòng ban</p>
                     <p className="mt-1 text-sm font-medium text-slate-900">
-                      {canSeeDepartment ? departmentName : 'Hidden'}
+                      {canSeeDepartment ? departmentName : 'Đã ẩn'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Salary</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Lương</p>
                     <p className="mt-1 text-sm font-medium text-slate-900">
-                      {canSeeSalary ? formatCurrency(employee.salary ?? 0) : 'Restricted'}
+                      {canSeeSalary ? formatCurrency(employee.salary ?? 0) : 'Bị giới hạn'}
                     </p>
                   </div>
                 </div>
@@ -479,7 +482,7 @@ export const Dashboard: React.FC = () => {
                   onClick={() => handleEmployeeNavigation(employee.id)}
                   className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-cyan-700 transition hover:text-cyan-800"
                 >
-                  Open profile
+                  Mở hồ sơ
                   <ArrowRight className="h-4 w-4" />
                 </button>
               </article>
@@ -492,17 +495,17 @@ export const Dashboard: React.FC = () => {
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
               <Users className="h-6 w-6" />
             </div>
-            <h3 className="mt-5 text-xl font-semibold text-slate-900">No employees match this view</h3>
+            <h3 className="mt-5 text-xl font-semibold text-slate-900">Không có nhân viên phù hợp</h3>
             <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">
-              Try adjusting your search or filters. If the list is still empty, your current role may not have
-              permission to view additional employee records.
+              Hãy điều chỉnh từ khóa hoặc bộ lọc. Nếu danh sách vẫn trống, vai trò hiện tại của bạn có thể
+              không được phép xem thêm hồ sơ nhân viên.
             </p>
             <button
               type="button"
               onClick={handleResetFilters}
               className="mt-6 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
             >
-              Clear filters
+              Xóa bộ lọc
             </button>
           </div>
         )}

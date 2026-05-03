@@ -5,9 +5,10 @@ import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { getRequestIp } from '../context';
 import { assertPermission, getDepartmentScope } from '../utils/rbac';
+import { SYSTEM_ROLES } from '../../types';
 import type { Role } from '../../types';
 
-const roles: [Role, ...Role[]] = ['REGULAR', 'MANAGER', 'HR_EMPLOYEE', 'HR_MANAGER', 'ACCOUNTING', 'ADMIN'];
+const roles = SYSTEM_ROLES;
 
 type EmployeeViewRow = {
   id: string;
@@ -43,7 +44,7 @@ const toEmployeePayload = (row: EmployeeViewRow) => ({
   salary: normalizeMoney(row.salary),
   taxCode: row.taxCode ?? undefined,
   bankAccount: row.bankAccount ?? undefined,
-  role: roles.includes(row.role as Role) ? (row.role as Role) : 'REGULAR',
+  role: (row.role?.trim() || 'REGULAR') as Role,
   status: row.status,
   hireDate: formatDate(row.hireDate),
 });
