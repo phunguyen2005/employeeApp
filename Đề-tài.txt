@@ -1,0 +1,20 @@
+Đề tài 6: QUẢN LÝ NHÂN VIÊN
+- Thông tin về nhân viên được lưu trữ gồm có: mã số, tên, ngày sinh, email, phòng ban đang
+làm việc, lương, mã số thuế. Mỗi một phòng ban có một trưởng phòng và quản lý mọi nhân
+viên trong phòng.
+- Chính sách của công ty:
+V Nhân viên của một phòng ban chỉ được xem mọi thông tin của các nhân viên cùng phòng
+ban với mình, ngoại trừ thông tin về lương. Lưu ý, chỉ được xem chứ không có quyền
+chỉnh sửa (insert, delete, update) thông tin, kể cả thông tin của mình.
+V Quản lý của phòng ban có quyền xem mọi thông tin của nhân viên trong phòng, kể cả
+thông tin về lương, tuy nhiên cũng không có quyền chỉnh sửa.
+v Đối với phòng HR (Human Resource):
++ Nhân viên phòng nhân sự có quyền xem, chỉnh sửa mọi thông tin của bất cứ nhân viên
+nào trong công ty, ngoại trừ nhân viên trong phòng của mình. (chính sách thứ nhất vẫn
+áp dụng cho nhân viên phòng nhân sự)
++ Trưởng phòng nhân sự có quyền xem và chỉnh sửa thông tin của mọi nhân viên, đồng
+thời có khả năng giám sát việc chỉnh sửa thông tin cá nhân của nhân viên trong phòng
+nhân sự.
+v Đối với phòng kế toán: nhân viên phòng kế toán vẫn áp dụng chính sách thứ nhất. Tuy
+nhiên để tính lương cho nhân viên trong công ty thì nhân viên phòng kế toán có quyền xem
+mã số nhân viên, lương và mã số thuế của mọi nhân viên trong công ty.
