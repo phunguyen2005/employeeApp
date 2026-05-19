@@ -54,20 +54,29 @@ Navigate to `http://localhost:3000` in your web browser to view the application!
 
 ---
 
-## Default Login Credentials
+## Tài khoản đăng nhập mặc định
 
-After securely seeding the database, you can log in to test different access privileges using the following credentials:
+Sau khi seed database, hệ thống có 53 nhân viên mẫu với dữ liệu hồ sơ tiếng Việt. Có thể dùng các tài khoản đại diện sau để kiểm thử phân quyền:
 
-| Email                 | Password | Role                 |
-|-----------------------|----------|----------------------|
-| an.nguyen@company.vn  | an       | `ADMIN`              |
-| binh.tran@company.vn  | binh     | `MANAGER`            |
-| chau.le@company.vn    | chau     | `REGULAR`            |
-| dung.pham@company.vn  | dung     | `HR_MANAGER`         |
-| giang.vo@company.vn   | giang    | `HR_EMPLOYEE`        |
-| hai.do@company.vn     | hai      | `MANAGER`            |
-| linh.bui@company.vn   | linh     | `ACCOUNTING`         |
-| nam.hoang@company.vn  | nam      | `REGULAR`            |
+| Email                 | Mật khẩu | Vai trò kỹ thuật |
+|-----------------------|----------|------------------|
+| an.nguyen@company.vn  | an       | `ADMIN`          |
+| binh.tran@company.vn  | binh     | `MANAGER`        |
+| chau.le@company.vn    | chau     | `REGULAR`        |
+| dung.pham@company.vn  | dung     | `HR_MANAGER`     |
+| giang.vo@company.vn   | giang    | `HR_EMPLOYEE`    |
+| linh.bui@company.vn   | linh     | `ACCOUNTING`     |
+
+Các tài khoản bổ sung dùng quy ước email ASCII và mật khẩu trùng phần trước `@`:
+
+- `nhanvien01@company.vn` đến `nhanvien08@company.vn`
+- `quanly01@company.vn` đến `quanly08@company.vn`
+- `nhansu01@company.vn` đến `nhansu09@company.vn`
+- `quanlynhansu01@company.vn` đến `quanlynhansu09@company.vn`
+- `ketoan01@company.vn` đến `ketoan09@company.vn`
+- `admin02@company.vn` và `admin03@company.vn`
+
+Số lượng sau seed: `REGULAR=10`, `MANAGER=10`, `HR_EMPLOYEE=10`, `HR_MANAGER=10`, `ACCOUNTING=10`, `ADMIN=3`.
 
 ## Database Security Model
 
