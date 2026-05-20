@@ -1,5 +1,6 @@
 import { protectedProcedure, router } from '../trpc';
 import { assertPermission } from '../utils/rbac';
+import { buildReadableAuditChanges, formatAuditEventCode } from '../../lib/auditLogPresentation';
 
 type AuditLogRow = {
   id: string;
@@ -25,11 +26,8 @@ const parseJson = (value: string | null) => {
   }
 };
 
-const buildChangeSummary = (row: AuditLogRow) =>
-  JSON.stringify({
-    oldValues: parseJson(row.oldValues),
-    newValues: parseJson(row.newValues),
-  });
+const buildDepartmentMap = (departments: Array<{ id: string; name: string }>) =>
+  Object.fromEntries(departments.map((department) => [department.id.toLowerCase(), department.name]));
 
 export const auditRouter = router({
   getAll: protectedProcedure.query(async ({ ctx }) =>
@@ -42,17 +40,22 @@ export const auditRouter = router({
         FROM [dbo].[vw_AuditLogDetail]
         ORDER BY [timestamp] DESC
       `;
+      const departments = await tx.department.findMany({
+        select: { id: true, name: true },
+      });
+      const departmentNamesById = buildDepartmentMap(departments);
 
       return rows.map((row) => ({
         id: row.id,
         timestamp: row.timestamp instanceof Date ? row.timestamp.toISOString() : new Date(row.timestamp).toISOString(),
+        eventCode: formatAuditEventCode(row.id, row.timestamp),
         actorId: row.actorId,
         actorName: row.actorName ?? '[System]',
         targetTable: row.targetTable,
         targetId: row.targetId,
         targetName: row.targetName ?? row.targetId,
         action: row.action,
-        changes: buildChangeSummary(row),
+        changes: buildReadableAuditChanges(parseJson(row.oldValues), parseJson(row.newValues), departmentNamesById),
         oldValues: row.oldValues,
         newValues: row.newValues,
         ipAddress: row.ipAddress,

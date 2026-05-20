@@ -4,25 +4,28 @@ BEGIN
     ADD [employeeCode] NVARCHAR(20) NULL;
 END;
 
+EXEC(N'
 ;WITH OrderedEmployees AS (
     SELECT
         [id],
         ROW_NUMBER() OVER (ORDER BY [createdAt], [id]) AS [codeNumber]
     FROM [dbo].[Employee]
-    WHERE [employeeCode] IS NULL OR LTRIM(RTRIM([employeeCode])) = N''
+    WHERE [employeeCode] IS NULL OR LTRIM(RTRIM([employeeCode])) = N''''
 )
 UPDATE e
-SET [employeeCode] = CONCAT(N'NV-', RIGHT(N'000000' + CONVERT(NVARCHAR(6), oe.[codeNumber]), 6))
+SET [employeeCode] = CONCAT(N''NV-'', RIGHT(N''000000'' + CONVERT(NVARCHAR(6), oe.[codeNumber]), 6))
 FROM [dbo].[Employee] e
 INNER JOIN OrderedEmployees oe ON e.[id] = oe.[id];
+');
 
-IF EXISTS (SELECT 1 FROM [dbo].[Employee] WHERE [employeeCode] IS NULL OR LTRIM(RTRIM([employeeCode])) = N'')
+EXEC(N'
+IF EXISTS (SELECT 1 FROM [dbo].[Employee] WHERE [employeeCode] IS NULL OR LTRIM(RTRIM([employeeCode])) = N'''')
 BEGIN
-    THROW 51000, 'Employee.employeeCode backfill failed.', 1;
+    THROW 51000, ''Employee.employeeCode backfill failed.'', 1;
 END;
+');
 
-ALTER TABLE [dbo].[Employee]
-ALTER COLUMN [employeeCode] NVARCHAR(20) NOT NULL;
+EXEC(N'ALTER TABLE [dbo].[Employee] ALTER COLUMN [employeeCode] NVARCHAR(20) NOT NULL;');
 
 IF NOT EXISTS (
     SELECT 1
@@ -31,8 +34,7 @@ IF NOT EXISTS (
       AND [parent_object_id] = OBJECT_ID(N'[dbo].[Employee]')
 )
 BEGIN
-    ALTER TABLE [dbo].[Employee]
-    ADD CONSTRAINT [UQ_Employee_employeeCode] UNIQUE NONCLUSTERED ([employeeCode]);
+    EXEC(N'ALTER TABLE [dbo].[Employee] ADD CONSTRAINT [UQ_Employee_employeeCode] UNIQUE NONCLUSTERED ([employeeCode]);');
 END;
 
 IF OBJECT_ID(N'[dbo].[EmployeeCodeSequence]', N'SO') IS NULL
@@ -41,29 +43,16 @@ BEGIN
 END;
 
 DECLARE @NextEmployeeCode BIGINT;
-SELECT @NextEmployeeCode = COALESCE(MAX(TRY_CONVERT(BIGINT, SUBSTRING([employeeCode], 4, 6))), 0) + 1
-FROM [dbo].[Employee]
-WHERE [employeeCode] LIKE N'NV-[0-9][0-9][0-9][0-9][0-9][0-9]';
+EXEC sp_executesql
+    N'SELECT @NextEmployeeCodeOutput = COALESCE(MAX(TRY_CONVERT(BIGINT, SUBSTRING([employeeCode], 4, 6))), 0) + 1
+      FROM [dbo].[Employee]
+      WHERE [employeeCode] LIKE N''NV-[0-9][0-9][0-9][0-9][0-9][0-9]'';',
+    N'@NextEmployeeCodeOutput BIGINT OUTPUT',
+    @NextEmployeeCodeOutput = @NextEmployeeCode OUTPUT;
 
-EXEC(N'ALTER SEQUENCE [dbo].[EmployeeCodeSequence] RESTART WITH ' + CONVERT(NVARCHAR(20), @NextEmployeeCode));
-
-DECLARE @CurrentEmployeeCodeDefault SYSNAME;
-SELECT @CurrentEmployeeCodeDefault = dc.[name]
-FROM sys.default_constraints dc
-INNER JOIN sys.columns c
-    ON c.[default_object_id] = dc.[object_id]
-WHERE dc.[parent_object_id] = OBJECT_ID(N'[dbo].[Employee]')
-  AND c.[name] = N'employeeCode';
-
-IF @CurrentEmployeeCodeDefault IS NOT NULL
-BEGIN
-    EXEC(N'ALTER TABLE [dbo].[Employee] DROP CONSTRAINT ' + QUOTENAME(@CurrentEmployeeCodeDefault) + N';');
-END;
-
-ALTER TABLE [dbo].[Employee]
-ADD CONSTRAINT [Employee_employeeCode_df]
-DEFAULT (CONCAT(N'NV-', RIGHT(N'000000' + CONVERT(NVARCHAR(6), NEXT VALUE FOR [dbo].[EmployeeCodeSequence]), 6)))
-FOR [employeeCode];
+DECLARE @RestartEmployeeCodeSequenceSql NVARCHAR(MAX) =
+    N'ALTER SEQUENCE [dbo].[EmployeeCodeSequence] RESTART WITH ' + CONVERT(NVARCHAR(20), @NextEmployeeCode);
+EXEC sp_executesql @RestartEmployeeCodeSequenceSql;
 
 EXEC(N'CREATE OR ALTER VIEW [dbo].[vw_EmployeeDirectory] AS
 SELECT

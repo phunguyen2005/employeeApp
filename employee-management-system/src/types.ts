@@ -42,6 +42,7 @@ export interface Department {
 
 export interface AuditLog {
   id: string;
+  eventCode?: string;
   timestamp: string;
   actorId: string | null;
   actorName: string;

@@ -13,7 +13,8 @@ import {
   X,
 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
-import { cn, formatCurrency, formatDateTimeVi, formatRelativeTimeVi } from '../lib/utils';
+import { formatAuditChanges, formatAuditEventCode } from '../lib/auditLogPresentation';
+import { cn, formatDateTimeVi, formatRelativeTimeVi } from '../lib/utils';
 import type { AuditLog } from '../types';
 
 type AuditLogInput = Partial<AuditLog> & {
@@ -71,30 +72,6 @@ const actionCopy: Record<AuditAction, string> = {
   LOGIN_FAILURE: 'Đăng nhập thất bại',
 };
 
-const fieldLabels: Record<string, string> = {
-  oldValues: 'Trước khi thay đổi',
-  newValues: 'Sau khi thay đổi',
-  fullName: 'Họ và tên',
-  email: 'Email',
-  dob: 'Ngày sinh',
-  departmentId: 'Phòng ban',
-  salary: 'Lương',
-  taxCode: 'Mã số thuế',
-  roleName: 'Vai trò',
-  description: 'Mô tả',
-  isSystem: 'Vai trò hệ thống',
-  isActive: 'Đang hoạt động',
-  failedAttempts: 'Số lần đăng nhập thất bại',
-  lockedUntil: 'Khóa đến',
-  employeeId: 'ID nội bộ',
-  employeeCode: 'Mã nhân viên',
-  permission: 'Quyền',
-  permissionCount: 'Số quyền',
-  resource: 'Tài nguyên',
-  action: 'Thao tác',
-  scope: 'Phạm vi',
-};
-
 const isAuditAction = (value: unknown): value is AuditAction =>
   value === 'CREATE' ||
   value === 'READ' ||
@@ -111,6 +88,7 @@ const normalizeAuditLog = (log: AuditLogInput | null | undefined): AuditLog | nu
 
   return {
     id: log.id,
+    eventCode: log.eventCode?.trim() || formatAuditEventCode(log.id, log.timestamp),
     timestamp: log.timestamp,
     actorId: log.actorId || 'Không xác định người thực hiện',
     actorName: log.actorName?.trim() === '[System]' ? 'Hệ thống' : log.actorName?.trim() || 'Không xác định người thực hiện',
@@ -119,46 +97,6 @@ const normalizeAuditLog = (log: AuditLogInput | null | undefined): AuditLog | nu
     action: isAuditAction(log.action) ? log.action : 'UPDATE',
     changes: log.changes?.trim() || 'Không có chi tiết thay đổi cho hoạt động này.',
   };
-};
-
-const formatAuditPrimitive = (value: unknown): string => {
-  if (value === null || value === undefined || value === '') return 'trống';
-  if (typeof value === 'boolean') return value ? 'Có' : 'Không';
-  if (typeof value === 'number') return new Intl.NumberFormat('vi-VN').format(value);
-  if (typeof value === 'string') return value;
-
-  return JSON.stringify(value);
-};
-
-const formatAuditObject = (value: unknown): string => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return formatAuditPrimitive(value);
-
-  return Object.entries(value as Record<string, unknown>)
-    .map(([key, entry]) => {
-      const formattedValue =
-        key === 'salary' && entry !== null && entry !== undefined && !Number.isNaN(Number(entry))
-          ? formatCurrency(Number(entry))
-          : formatAuditPrimitive(entry);
-
-      return `${fieldLabels[key] ?? key}: ${formattedValue}`;
-    })
-    .join(', ');
-};
-
-const formatAuditChanges = (changes: string) => {
-  try {
-    const parsed = JSON.parse(changes);
-
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      const oldValues = formatAuditObject((parsed as Record<string, unknown>).oldValues);
-      const newValues = formatAuditObject((parsed as Record<string, unknown>).newValues);
-      return `${fieldLabels.oldValues}: ${oldValues}; ${fieldLabels.newValues}: ${newValues}`;
-    }
-  } catch {
-    return changes;
-  }
-
-  return changes;
 };
 
 export const AuditLogs: React.FC = () => {
@@ -198,9 +136,8 @@ export const AuditLogs: React.FC = () => {
 
         const haystack = [
           log.actorName,
-          log.actorId,
+          log.eventCode,
           log.targetName,
-          log.targetId,
           log.changes,
           log.action,
         ]
@@ -448,7 +385,7 @@ export const AuditLogs: React.FC = () => {
                       >
                         {actionCopy[log.action]}
                       </span>
-                      <span className="text-sm font-medium text-slate-500">Mã sự kiện: {log.id}</span>
+                      <span className="text-sm font-medium text-slate-500">Mã sự kiện: {log.eventCode}</span>
                     </div>
 
                     <div>
@@ -462,13 +399,11 @@ export const AuditLogs: React.FC = () => {
                       <div className="rounded-2xl bg-slate-50 px-4 py-3">
                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Người thực hiện</p>
                         <p className="mt-1 font-medium text-slate-900">{log.actorName}</p>
-                        <p className="mt-1 text-xs text-slate-500">{log.actorId}</p>
                       </div>
 
                       <div className="rounded-2xl bg-slate-50 px-4 py-3">
                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Đối tượng</p>
                         <p className="mt-1 font-medium text-slate-900">{log.targetName}</p>
-                        <p className="mt-1 text-xs text-slate-500">{log.targetId}</p>
                       </div>
 
                       <div className="rounded-2xl bg-slate-50 px-4 py-3">

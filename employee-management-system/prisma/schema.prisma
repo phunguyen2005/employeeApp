@@ -75,7 +75,7 @@ model UserRole {
 
 model Employee {
   id           String   @id @default(uuid()) @db.UniqueIdentifier
-  employeeCode String   @unique @default(dbgenerated("CONCAT(N'NV-', RIGHT(N'000000' + CONVERT(NVARCHAR(6), NEXT VALUE FOR [dbo].[EmployeeCodeSequence]), 6))")) @db.NVarChar(20)
+  employeeCode String   @unique @db.NVarChar(20)
   userId       String   @unique @db.UniqueIdentifier
   fullName     String   @db.NVarChar(200)
   dob          DateTime @db.Date
