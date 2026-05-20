@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { protectedProcedure, router } from '../trpc';
 import { getRequestIp } from '../context';
 import { assertPermission } from '../utils/rbac';
+import { getNextEmployeeCode } from '../utils/employeeCode';
 
 const getUserAgent = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value.join(', ') : value ?? null;
@@ -44,6 +45,7 @@ const toUserPayload = (user: any) => {
     lockedUntil: toIso(user.lockedUntil),
     createdAt: toIso(user.createdAt),
     employeeId: (user.employee?.id ?? null) as string | null,
+    employeeCode: (user.employee?.employeeCode ?? null) as string | null,
     fullName: (user.employee?.fullName ?? '[No employee profile]') as string,
     departmentId: (user.employee?.departmentId ?? null) as string | null,
     departmentName: (user.employee?.department?.name ?? null) as string | null,
@@ -102,6 +104,7 @@ export const userRouter = router({
         if (!role) throw new TRPCError({ code: 'NOT_FOUND', message: 'Role not found.' });
 
         const passwordHash = await bcrypt.hash(input.password, 10);
+        const employeeCode = await getNextEmployeeCode(tx);
         const appUser = await tx.appUser.create({
           data: {
             email: input.email.trim(),
@@ -112,6 +115,7 @@ export const userRouter = router({
 
         const employee = await tx.employee.create({
           data: {
+            employeeCode,
             userId: appUser.id,
             fullName: input.fullName,
             dob: new Date(input.dob),
@@ -141,6 +145,7 @@ export const userRouter = router({
             action: 'CREATE',
             newValues: JSON.stringify({
               email: appUser.email,
+              employeeCode: employee.employeeCode,
               fullName: employee.fullName,
               departmentId: employee.departmentId,
               roleName: role.name,
@@ -325,7 +330,7 @@ export const userRouter = router({
             oldValues: JSON.stringify({
               email: target.email,
               roleName: target.roleName,
-              employeeId: target.employee?.id ?? null,
+              employeeCode: target.employee?.employeeCode ?? null,
             }),
             ipAddress: getRequestIp(ctx.req),
             userAgent: getUserAgent(ctx.req.headers['user-agent']),

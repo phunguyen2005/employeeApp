@@ -5,6 +5,7 @@ import { cn, formatDateTimeVi, formatDepartmentName, formatRoleLabel, translateA
 
 type UserRow = {
   id: string;
+  employeeCode: string | null;
   email: string;
   fullName: string;
   roleId: string | null;
@@ -281,6 +282,7 @@ export const UsersManagement: React.FC = () => {
                     <td className="px-5 py-4">
                       <p className="font-medium text-slate-900">{user.fullName}</p>
                       <p className="mt-1 text-sm text-slate-500">{user.email}</p>
+                      {user.employeeCode && <p className="mt-1 text-xs text-slate-500">Mã nhân viên: {user.employeeCode}</p>}
                       <p className="mt-1 text-xs text-slate-400">{formatDepartmentName(user.departmentName)}</p>
                     </td>
                     <td className="px-5 py-4">

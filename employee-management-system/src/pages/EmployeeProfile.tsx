@@ -26,6 +26,7 @@ import { trpc } from '../lib/trpc';
 
 type EmployeeProfileInput = {
   id?: string | null;
+  employeeCode?: string | null;
   fullName?: string | null;
   dob?: string | null;
   email?: string | null;
@@ -119,6 +120,7 @@ const normalizeEmployee = (
 
   return {
     id: employee.id,
+    employeeCode: employee.employeeCode?.trim() || 'Chưa có mã',
     fullName: employee.fullName?.trim() || 'Nhân viên bị giới hạn',
     dob: employee.dob || '',
     email: employee.email || '',
@@ -319,6 +321,7 @@ export const EmployeeProfile: React.FC = () => {
     visibleFields.includes('departmentId') && formData.departmentId
       ? normalizedDepartments.find((department) => department.id === formData.departmentId)?.name || 'Chưa phân phòng ban'
       : 'Bị giới hạn';
+  const displayEmployeeCode = isNew ? 'Sẽ được cấp sau khi tạo' : normalizedEmployee?.employeeCode || 'Chưa có mã';
 
   const showDeleteAction = !isNew && canCreateDeleteEmployee(currentUser);
 
@@ -622,7 +625,7 @@ export const EmployeeProfile: React.FC = () => {
                 {displayRole}
               </span>
               <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-sm text-slate-200">
-                {isNew ? 'Hồ sơ mới' : `Mã nhân viên: ${id}`}
+                {isNew ? 'Hồ sơ mới' : `Mã nhân viên: ${displayEmployeeCode}`}
               </span>
               <span className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-sm text-slate-200">
                 {displayDepartment}
@@ -821,7 +824,7 @@ export const EmployeeProfile: React.FC = () => {
                 <IdCard className="mt-0.5 h-5 w-5 text-slate-400" />
                 <div>
                   <p className="font-medium text-slate-900">Mã nhân viên</p>
-                  <p>{isNew ? 'Sẽ được cấp sau khi tạo' : id}</p>
+                  <p>{displayEmployeeCode}</p>
                 </div>
               </div>
             </div>

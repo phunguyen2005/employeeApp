@@ -22,6 +22,7 @@ export const getRequestIp = (req: trpcExpress.CreateExpressContextOptions['req']
 
 export interface UserContext {
   id: string;
+  employeeCode: string;
   userId: string;
   employeeId: string;
   fullName: string;
@@ -67,6 +68,7 @@ const getEmployeeContext = async (
 
     const userContext: UserContext = {
       id: employee.id,
+      employeeCode: employee.employeeCode,
       userId: employee.userId,
       employeeId: employee.id,
       fullName: employee.fullName,

@@ -66,8 +66,8 @@ export const canManageUsersRolesPermissions = (currentUser: Employee): boolean =
 };
 
 export const getVisibleFields = (currentUser: Employee, target: Employee): (keyof Employee)[] => {
-  const allFields: (keyof Employee)[] = ['id', 'fullName', 'dob', 'email', 'departmentId', 'salary', 'taxCode', 'role'];
-  const directoryFields: (keyof Employee)[] = ['id', 'fullName', 'dob', 'email', 'departmentId', 'role'];
+  const allFields: (keyof Employee)[] = ['id', 'employeeCode', 'fullName', 'dob', 'email', 'departmentId', 'salary', 'taxCode', 'role'];
+  const directoryFields: (keyof Employee)[] = ['id', 'employeeCode', 'fullName', 'dob', 'email', 'departmentId', 'role'];
 
   if (['ADMIN', 'HR_MANAGER', 'HR_EMPLOYEE', 'ACCOUNTING'].includes(currentUser.role)) {
     return allFields;

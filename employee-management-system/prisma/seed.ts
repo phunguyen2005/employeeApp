@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { formatEmployeeCode } from '../src/lib/employeeCode';
 
 const prisma = new PrismaClient();
 
@@ -147,6 +148,12 @@ const enableSecurityAfterSeed = async () => {
   await prisma.$executeRawUnsafe("IF EXISTS (SELECT 1 FROM sys.security_policies WHERE name = N'SensitiveDataPolicy') ALTER SECURITY POLICY [dbo].[SensitiveDataPolicy] WITH (STATE = ON)");
 };
 
+const resetEmployeeCodeSequence = async (nextSequenceNumber: number) => {
+  await prisma.$executeRawUnsafe(
+    `IF OBJECT_ID(N'[dbo].[EmployeeCodeSequence]', N'SO') IS NOT NULL ALTER SEQUENCE [dbo].[EmployeeCodeSequence] RESTART WITH ${nextSequenceNumber}`
+  );
+};
+
 const seedRolesAndPermissions = async () => {
   const roles = await Promise.all(
     systemRoles.map((role) =>
@@ -224,7 +231,7 @@ async function main() {
   const deptMap = Object.fromEntries(departments.map((department) => [department.name, department.id]));
   const createdEmployees: Record<string, { id: string; userId: string }> = {};
 
-  for (const employee of employeesData) {
+  for (const [index, employee] of employeesData.entries()) {
     const passwordHash = await bcrypt.hash(employee.p, 10);
     const appUser = await prisma.appUser.create({
       data: {
@@ -233,6 +240,7 @@ async function main() {
         roleName: employee.role,
         employee: {
           create: {
+            employeeCode: formatEmployeeCode(index + 1),
             fullName: employee.fullName,
             dob: employee.dob,
             phone: employee.phone,
@@ -279,6 +287,8 @@ async function main() {
     where: { id: deptMap.Administration },
     data: { managerId: createdEmployees.an.id },
   });
+
+  await resetEmployeeCodeSequence(employeesData.length + 1);
 
   await enableSecurityAfterSeed();
 

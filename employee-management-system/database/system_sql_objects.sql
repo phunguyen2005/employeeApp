@@ -20,6 +20,7 @@ GO
 CREATE OR ALTER VIEW [dbo].[vw_EmployeeDirectory] AS
 SELECT
     e.[id] AS [employeeId],
+    e.[employeeCode],
     e.[fullName],
     e.[dob],
     u.[email],
@@ -38,6 +39,7 @@ GO
 CREATE OR ALTER VIEW [dbo].[vw_EmployeeWithSensitive] AS
 SELECT
     e.[id] AS [employeeId],
+    e.[employeeCode],
     e.[fullName],
     e.[dob],
     u.[email],
@@ -60,6 +62,7 @@ GO
 CREATE OR ALTER VIEW [dbo].[vw_PayrollSummary] AS
 SELECT
     e.[id] AS [employeeId],
+    e.[employeeCode],
     e.[fullName],
     e.[departmentId],
     d.[name] AS [departmentName],
@@ -75,6 +78,7 @@ GO
 CREATE OR ALTER VIEW [dbo].[vw_DepartmentRoster] AS
 SELECT
     e.[id] AS [employeeId],
+    e.[employeeCode],
     e.[fullName],
     e.[dob],
     u.[email],
@@ -98,7 +102,7 @@ SELECT
     al.[targetTable],
     al.[targetId],
     COALESCE(
-        targetEmployee.[fullName],
+        CONCAT(targetEmployee.[employeeCode], N' - ', targetEmployee.[fullName]),
         targetDepartment.[name],
         targetUser.[email],
         targetRole.[name],

@@ -19,6 +19,7 @@ export type AuditAction =
 
 export interface Employee {
   id: string;
+  employeeCode: string;
   fullName: string;
   dob: string;
   email: string;

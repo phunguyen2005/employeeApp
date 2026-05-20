@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { getRequestIp } from '../context';
 import { assertPermission, getDepartmentScope } from '../utils/rbac';
+import { getNextEmployeeCode } from '../utils/employeeCode';
 import { SYSTEM_ROLES } from '../../types';
 import type { Role } from '../../types';
 
@@ -12,6 +13,7 @@ const roles = SYSTEM_ROLES;
 
 type EmployeeViewRow = {
   id: string;
+  employeeCode: string;
   fullName: string;
   dob: Date | string;
   email: string;
@@ -36,6 +38,7 @@ const normalizeMoney = (value: EmployeeViewRow['salary']) => {
 
 const toEmployeePayload = (row: EmployeeViewRow) => ({
   id: row.id,
+  employeeCode: row.employeeCode,
   fullName: row.fullName,
   dob: formatDate(row.dob),
   email: row.email,
@@ -52,7 +55,7 @@ const toEmployeePayload = (row: EmployeeViewRow) => ({
 const employeeViewQuery = async (tx: Prisma.TransactionClient, employeeId?: string) => {
   if (employeeId) {
     return tx.$queryRaw<EmployeeViewRow[]>`
-      SELECT employeeId AS id, fullName, dob, email, departmentId, departmentName, status,
+      SELECT employeeId AS id, employeeCode, fullName, dob, email, departmentId, departmentName, status,
              hireDate, salary, taxCode, bankAccount, primaryRole AS role
       FROM [dbo].[vw_EmployeeWithSensitive]
       WHERE employeeId = ${employeeId}
@@ -60,7 +63,7 @@ const employeeViewQuery = async (tx: Prisma.TransactionClient, employeeId?: stri
   }
 
   return tx.$queryRaw<EmployeeViewRow[]>`
-    SELECT employeeId AS id, fullName, dob, email, departmentId, departmentName, status,
+    SELECT employeeId AS id, employeeCode, fullName, dob, email, departmentId, departmentName, status,
            hireDate, salary, taxCode, bankAccount, primaryRole AS role
     FROM [dbo].[vw_EmployeeWithSensitive]
     ORDER BY fullName
@@ -219,6 +222,7 @@ export const employeeRouter = router({
 
         const passwordHash = await bcrypt.hash(input.password, 10);
         const ipAddress = getRequestIp(ctx.req);
+        const employeeCode = await getNextEmployeeCode(tx);
 
         const appUser = await tx.appUser.create({
           data: {
@@ -230,6 +234,7 @@ export const employeeRouter = router({
 
         const employee = await tx.employee.create({
           data: {
+            employeeCode,
             userId: appUser.id,
             fullName: input.fullName,
             dob: new Date(input.dob),
@@ -250,6 +255,7 @@ export const employeeRouter = router({
             targetId: employee.id,
             action: 'CREATE',
             newValues: JSON.stringify({
+              employeeCode: employee.employeeCode,
               fullName: input.fullName,
               email: input.email,
               departmentId: input.departmentId ?? null,

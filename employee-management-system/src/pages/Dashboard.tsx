@@ -50,6 +50,7 @@ const roleBadgeStyles: Record<SystemRole, string> = {
 
 type DashboardEmployeeInput = {
   id?: string;
+  employeeCode?: string | null;
   fullName?: string | null;
   dob?: string | null;
   email?: string | null;
@@ -72,6 +73,7 @@ const buildSafeEmployee = (rawEmployee: DashboardEmployeeInput | null | undefine
 
   return {
     id: rawEmployee.id,
+    employeeCode: rawEmployee.employeeCode?.trim() || 'Chưa có mã',
     fullName: rawEmployee.fullName?.trim() || 'Nhân viên chưa có tên',
     dob: rawEmployee.dob || '',
     email: rawEmployee.email || '',
@@ -137,7 +139,7 @@ export const Dashboard: React.FC = () => {
 
     const matchesSearch =
       !deferredSearchTerm ||
-      [employee.fullName, employee.id, employee.email, departmentName, getRoleLabel(employee.role)]
+      [employee.fullName, employee.employeeCode, employee.email, departmentName, getRoleLabel(employee.role)]
         .join(' ')
         .toLowerCase()
         .includes(deferredSearchTerm);
@@ -372,6 +374,7 @@ export const Dashboard: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {filteredEmployees.map(({ employee, departmentName, visibleFields, initials }) => {
                   const canSeeFullName = visibleFields.includes('fullName');
+                  const canSeeEmployeeCode = visibleFields.includes('employeeCode');
                   const canSeeDepartment = visibleFields.includes('departmentId');
                   const canSeeRole = visibleFields.includes('role');
                   const canSeeSalary = visibleFields.includes('salary');
@@ -387,7 +390,7 @@ export const Dashboard: React.FC = () => {
                             <p className="text-sm font-semibold text-slate-900">
                               {canSeeFullName ? employee.fullName : 'Ẩn theo chính sách truy cập'}
                             </p>
-                            <p className="mt-1 text-sm text-slate-500">Mã nhân viên: {employee.id}</p>
+                            <p className="mt-1 text-sm text-slate-500">Mã nhân viên: {canSeeEmployeeCode ? employee.employeeCode : 'Đã ẩn'}</p>
                           </div>
                         </div>
                       </td>
@@ -430,6 +433,7 @@ export const Dashboard: React.FC = () => {
         <div className="grid gap-4 lg:hidden">
           {filteredEmployees.map(({ employee, departmentName, visibleFields, initials }) => {
             const canSeeFullName = visibleFields.includes('fullName');
+            const canSeeEmployeeCode = visibleFields.includes('employeeCode');
             const canSeeDepartment = visibleFields.includes('departmentId');
             const canSeeRole = visibleFields.includes('role');
             const canSeeSalary = visibleFields.includes('salary');
@@ -448,7 +452,7 @@ export const Dashboard: React.FC = () => {
                       <p className="text-base font-semibold text-slate-900">
                         {canSeeFullName ? employee.fullName : 'Ẩn theo chính sách truy cập'}
                       </p>
-                      <p className="mt-1 text-sm text-slate-500">Mã nhân viên: {employee.id}</p>
+                      <p className="mt-1 text-sm text-slate-500">Mã nhân viên: {canSeeEmployeeCode ? employee.employeeCode : 'Đã ẩn'}</p>
                     </div>
                   </div>
 
